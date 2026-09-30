@@ -20,6 +20,4 @@ public interface ISaasDbContext : IRepPDbContext
     DbSet<AssinaturaPremium> AssinaturasPremium { get; }
     DbSet<ContaGatewayCanal> ContasGateway { get; }
     DbSet<EventoGateway> EventosGateway { get; }
-    DbSet<MarcaCanal> MarcasCanal { get; }
-    DbSet<DominioCanal> DominiosCanal { get; }
 }

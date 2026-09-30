@@ -74,8 +74,6 @@ public class PersonaliPontoDbContext(DbContextOptions<PersonaliPontoDbContext> o
     public DbSet<AssinaturaPremium> AssinaturasPremium => Set<AssinaturaPremium>();
     public DbSet<ContaGatewayCanal> ContasGateway => Set<ContaGatewayCanal>();
     public DbSet<EventoGateway> EventosGateway => Set<EventoGateway>();
-    public DbSet<MarcaCanal> MarcasCanal => Set<MarcaCanal>();
-    public DbSet<DominioCanal> DominiosCanal => Set<DominioCanal>();
 
     /// <summary>O PostgreSQL (timestamptz) só aceita UTC: normaliza qualquer offset na gravação e nos parâmetros.</summary>
     protected override void ConfigureConventions(ModelConfigurationBuilder c)
@@ -402,30 +400,6 @@ public class PersonaliPontoDbContext(DbContextOptions<PersonaliPontoDbContext> o
             e.HasIndex(x => new { x.Origem, x.EventoId }).IsUnique();
             e.HasIndex(x => x.CobrancaId);
             e.HasQueryFilter(x => Sistema);
-        });
-
-        // White-label (E4): marca por canal (editável só pelo próprio canal — RLS) e domínios próprios (só plataforma grava).
-        b.Entity<MarcaCanal>(e =>
-        {
-            e.HasIndex(x => x.CanalId).IsUnique();
-            e.Property(x => x.TokensJson).HasColumnType("jsonb");
-            e.Property(x => x.LogoCaminho).HasMaxLength(300);
-            e.Property(x => x.LogoEscuraCaminho).HasMaxLength(300);
-            e.Property(x => x.FaviconCaminho).HasMaxLength(300);
-            e.Property(x => x.ImagemLoginCaminho).HasMaxLength(300);
-            e.HasOne<Canal>().WithMany().HasForeignKey(x => x.CanalId).OnDelete(DeleteBehavior.Restrict);
-            e.ToTable(t => t.HasCheckConstraint("ck_marcas_canal_versao", "versao >= 0"));
-            e.HasQueryFilter(x => Sistema || CanaisCanal.Contains(x.CanalId));
-        });
-        b.Entity<DominioCanal>(e =>
-        {
-            e.Property(x => x.Host).HasMaxLength(253);
-            e.Property(x => x.Observacao).HasMaxLength(300);
-            e.HasIndex(x => x.Host).IsUnique();
-            e.HasIndex(x => x.CanalId);
-            e.HasOne<Canal>().WithMany().HasForeignKey(x => x.CanalId).OnDelete(DeleteBehavior.Restrict);
-            e.ToTable(t => t.HasCheckConstraint("ck_dominios_canal_host", "host = lower(host) AND host !~ '[^a-z0-9.-]'"));
-            e.HasQueryFilter(x => Sistema || CanaisCanal.Contains(x.CanalId));
         });
 
         // Filtro de tenant para todas as entidades ITenantEntity que ainda não têm filtro próprio.

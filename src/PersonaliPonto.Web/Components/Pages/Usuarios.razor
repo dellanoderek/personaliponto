@@ -1,0 +1,118 @@
+@page "/usuarios"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+@using PersonaliPonto.Infrastructure.Seguranca
+
+<PageTitle>Usuários — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Configurações" Titulo="Usuários e perfis" Descricao="Perfis e permissões de acesso: Administrador, RH, Gestor e Funcionário. Senhas temporárias são exibidas uma única vez.">
+    <Acoes><button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo usuário</button></Acoes>
+</Cabecalho>
+
+@if (_criado is not null)
+{
+    <div class="alerta sucesso" style="margin-bottom:16px"><Icone Nome="chave" /><div>Login: <b>@_criado.Value.Login</b> · Senha temporária: <b class="mono" style="font-size:14px">@_criado.Value.Senha</b> — anote agora, ela não será exibida novamente.</div></div>
+}
+
+<div class="card">
+    <table class="tabela">
+        <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Último acesso</th><th>Situação</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var u in _lista)
+            {
+                <tr>
+                    <td style="font-weight:600">@u.Nome @if (u.MfaHabilitado) { <span class="badge b-verde">MFA</span> }</td>
+                    <td class="small">@(u.Email.EndsWith(UsuarioService.DominioInterno) ? "CPF " + Documentos.FormatarCpf(u.Cpf ?? "") : u.Email)</td>
+                    <td>
+                        <select value="@u.Papel" @onchange="e => MudarPapel(u, e.Value?.ToString())" style="height:32px;max-width:160px" disabled="@(u.Id == Usuario.UsuarioId())">
+                            @foreach (var p in Papeis)
+                            {
+                                <option value="@p">@Formato.Papel(p)</option>
+                            }
+                        </select>
+                    </td>
+                    <td class="small">@(u.UltimoLogin?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "nunca")</td>
+                    <td>
+                        @if (!u.Ativo) { <span class="badge b-cinza">inativo</span> }
+                        else if (u.BloqueadoAte > DateTimeOffset.UtcNow) { <span class="badge b-vermelho">bloqueado</span> }
+                        else { <span class="badge b-verde">ativo</span> }
+                    </td>
+                    <td class="right nowrap">
+                        <button class="btn btn-secundario btn-sm" @onclick="() => Redefinir(u)">Nova senha</button>
+                        @if (u.Id != Usuario.UsuarioId())
+                        {
+                            <button class="btn btn-fantasma btn-sm" @onclick="() => AlternarAtivo(u)">@(u.Ativo ? "Desativar" : "Reativar")</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="Novo usuário">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-12"><label>Nome</label><input type="text" @bind="_nome" /></div>
+            <div class="campo c-7"><label>E-mail</label><input type="email" @bind="_email" /></div>
+            <div class="campo c-5"><label>CPF</label><input type="text" @bind="_cpf" /></div>
+            <div class="campo c-12">
+                <label>Perfil</label>
+                <select @bind="_papel">
+                    @foreach (var p in Papeis.Where(p => p != Roles.Funcionario))
+                    {
+                        <option value="@p">@Formato.Papel(p)</option>
+                    }
+                </select>
+                <span class="ajuda">Para dar acesso a um funcionário, use o cadastro do funcionário (aba PIN e acesso).</span>
+            </div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Criar">Criar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private static readonly string[] Papeis = [Roles.AdminEmpresa, Roles.RH, Roles.Gestor, Roles.Funcionario];
+    private List<Usuario> _lista = [];
+    private bool _modal;
+    private string _nome = "", _email = "", _cpf = "", _papel = Roles.RH;
+    private (string Login, string Senha)? _criado;
+
+    protected override Task CarregarAsync() => Recarregar();
+    private async Task Recarregar() => _lista = await Svc<UsuarioService>().ListarAsync(default);
+
+    private void Novo() { _nome = _email = _cpf = ""; _papel = Roles.RH; _modal = true; }
+
+    private async Task Criar()
+    {
+        var ok = await Executar(async () =>
+        {
+            var r = await Svc<UsuarioService>().CriarAsync(_nome, _email, _cpf, _papel, null, default);
+            _criado = (r.Login, r.SenhaTemporaria);
+        }, "Usuário criado.");
+        if (ok) { _modal = false; await Recarregar(); }
+    }
+
+    private async Task Redefinir(Usuario u)
+    {
+        await Executar(async () =>
+        {
+            var s = await Svc<UsuarioService>().RedefinirSenhaAsync(u.Id, default);
+            _criado = (u.Email.EndsWith(UsuarioService.DominioInterno) ? Documentos.FormatarCpf(u.Cpf ?? "") : u.Email, s);
+        }, "Senha redefinida.");
+    }
+
+    private async Task MudarPapel(Usuario u, string? papel)
+    {
+        if (papel is null || papel == u.Papel) return;
+        if (await Executar(() => Svc<UsuarioService>().AlterarAsync(u.Id, papel, u.Ativo, default), "Perfil alterado.")) await Recarregar();
+    }
+
+    private async Task AlternarAtivo(Usuario u)
+    {
+        if (await Executar(() => Svc<UsuarioService>().AlterarAsync(u.Id, u.Papel, !u.Ativo, default), u.Ativo ? "Usuário desativado." : "Usuário reativado.")) await Recarregar();
+    }
+}

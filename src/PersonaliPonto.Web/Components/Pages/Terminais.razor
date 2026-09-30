@@ -1,0 +1,71 @@
+@page "/terminais"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+@using PersonaliPonto.Infrastructure.Seguranca
+
+<PageTitle>Terminais — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Configurações" Titulo="Terminais de ponto" Descricao="Transforme um computador ou tablet do estabelecimento em terminal de marcação. O terminal não mantém login de usuário: o funcionário se identifica com matrícula ou CPF e PIN." />
+
+<div class="grade grade-3">
+    <div class="card card-corpo pilha">
+        <div class="linha"><span class="numero">1</span><h3>Ativar este navegador</h3></div>
+        <p class="small">Abra esta página no equipamento que ficará no local, escolha o estabelecimento e ative. O navegador guardará uma credencial exclusiva de terminal.</p>
+        <form method="post" action="/terminal/ativar" class="pilha" data-enhance="false">
+            <AntiforgeryToken />
+            <div class="campo">
+                <label>Estabelecimento</label>
+                <select name="estabelecimentoId">
+                    @foreach (var e in _estabelecimentos)
+                    {
+                        <option value="@e.Id">@e.Nome</option>
+                    }
+                </select>
+            </div>
+            <div class="campo"><label>Nome do terminal</label><input type="text" name="nome" placeholder="Ex.: Recepção" required /></div>
+            <button class="btn btn-primario" type="submit"><Icone Nome="terminal" />Ativar e abrir terminal</button>
+        </form>
+        <div class="alerta info small"><Icone Nome="info" /><div>O terminal funciona mesmo com internet instável: marcações sem conexão ficam guardadas (com o PIN cifrado) e são enviadas automaticamente ao reconectar.</div></div>
+    </div>
+    <div class="card span-2">
+        <div class="card-cab"><h2>Terminais ativos</h2></div>
+        <table class="tabela">
+            <thead><tr><th>Nome</th><th>Local</th><th>Ativado em</th><th>Último uso</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var t in _terminais)
+                {
+                    <tr>
+                        <td style="font-weight:600">@t.Nome</td>
+                        <td>@_estabelecimentos.FirstOrDefault(e => e.Id == t.EstabelecimentoId)?.Nome</td>
+                        <td class="small">@t.CriadoEm.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td class="small">@(t.UltimoUso?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                        <td class="right"><button class="btn btn-perigo btn-sm" @onclick="() => Desativar(t)">Desativar</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (_terminais.Count == 0)
+        {
+            <Vazio Texto="Nenhum terminal ativo." Icone="terminal" />
+        }
+    </div>
+</div>
+
+@code {
+    private List<Estabelecimento> _estabelecimentos = [];
+    private List<TerminalWeb> _terminais = [];
+
+    protected override async Task CarregarAsync()
+    {
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().Where(e => e.Ativo).OrderBy(e => e.Nome).ToListAsync();
+        await Recarregar();
+    }
+
+    private async Task Recarregar() => _terminais = await Db.TerminaisWeb.AsNoTracking().Where(t => t.Ativo).OrderBy(t => t.Nome).ToListAsync();
+
+    private async Task Desativar(TerminalWeb t)
+    {
+        if (await Executar(() => Svc<TerminalService>().DesativarAsync(t.Id, default), "Terminal desativado."))
+            await Recarregar();
+    }
+}

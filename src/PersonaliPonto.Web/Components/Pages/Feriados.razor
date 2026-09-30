@@ -1,0 +1,116 @@
+@page "/feriados"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Feriados — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Cadastros" Titulo="Feriados e calendário" Descricao="Feriados nacionais, estaduais, municipais e da empresa. Dias de feriado não geram falta; trabalho em feriado é apurado como extra.">
+    <Acoes>
+        <div class="campo" style="min-width:110px"><select @bind="_ano" @bind:after="Recarregar">@for (var a = Hoje.Year - 1; a <= Hoje.Year + 2; a++) { <option value="@a">@a</option> }</select></div>
+        <button class="btn btn-secundario" disabled="@Ocupado" @onclick="GerarNacionais">Gerar nacionais de @_ano</button>
+        <button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo feriado</button>
+    </Acoes>
+</Cabecalho>
+
+<div class="card">
+    @if (_lista.Count == 0)
+    {
+        <Vazio Texto="@($"Nenhum feriado cadastrado para {_ano}.")" Icone="feriado" />
+    }
+    else
+    {
+        <table class="tabela">
+            <thead><tr><th>Data</th><th>Dia</th><th>Descrição</th><th>Abrangência</th><th>Local</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var f in _lista)
+                {
+                    <tr>
+                        <td class="nowrap" style="font-weight:600">@f.Data.ToString("dd/MM/yyyy")</td>
+                        <td>@Formato.DiaSemana(f.Data)</td>
+                        <td>@f.Descricao</td>
+                        <td><span class="badge b-azul">@f.Abrangencia</span></td>
+                        <td>@(f.EstabelecimentoId is null ? "Todos" : _estabelecimentos.FirstOrDefault(e => e.Id == f.EstabelecimentoId)?.Nome)</td>
+                        <td class="right"><button class="btn btn-perigo btn-sm" @onclick="() => Excluir(f)"><Icone Nome="lixo" /></button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="Novo feriado">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-4"><label>Data</label><input type="date" @bind="_novo.Data" /></div>
+            <div class="campo c-8"><label>Descrição</label><input type="text" @bind="_novo.Descricao" /></div>
+            <div class="campo c-6">
+                <label>Abrangência</label>
+                <select @bind="_novo.Abrangencia">
+                    @foreach (var a in Enum.GetValues<AbrangenciaFeriado>())
+                    {
+                        <option value="@a">@a</option>
+                    }
+                </select>
+            </div>
+            <div class="campo c-6">
+                <label>Local</label>
+                <select @bind="_novo.EstabelecimentoId">
+                    <option value="">Todos os locais</option>
+                    @foreach (var e in _estabelecimentos)
+                    {
+                        <option value="@e.Id">@e.Nome</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Salvar">Salvar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private int _ano = Hoje.Year;
+    private List<Feriado> _lista = [];
+    private List<Estabelecimento> _estabelecimentos = [];
+    private Feriado _novo = new();
+    private bool _modal;
+
+    protected override async Task CarregarAsync()
+    {
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().ToListAsync();
+        await Recarregar();
+    }
+
+    private async Task Recarregar() =>
+        _lista = await Db.Feriados.AsNoTracking().Where(f => f.Data.Year == _ano).OrderBy(f => f.Data).ToListAsync();
+
+    private void Novo()
+    {
+        _novo = new Feriado { Data = Hoje, Abrangencia = AbrangenciaFeriado.Municipal };
+        _modal = true;
+    }
+
+    private Task Salvar() => Executar(async () =>
+    {
+        await Svc<FeriadoService>().SalvarAsync(_novo, default);
+        _modal = false;
+        await Recarregar();
+    }, "Feriado salvo.");
+
+    private Task Excluir(Feriado f) => Executar(async () =>
+    {
+        await Svc<FeriadoService>().ExcluirAsync(f.Id, default);
+        await Recarregar();
+    }, "Feriado removido.");
+
+    private Task GerarNacionais() => Executar(async () =>
+    {
+        var n = await Svc<FeriadoService>().GerarNacionaisAsync(_ano, default);
+        Avisos.Sucesso(n == 0 ? "Os feriados nacionais já estavam cadastrados." : $"{n} feriados nacionais cadastrados.");
+        await Recarregar();
+    });
+}

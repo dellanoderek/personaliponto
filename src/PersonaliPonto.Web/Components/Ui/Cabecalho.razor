@@ -1,0 +1,23 @@
+<div class="cabecalho-pagina">
+    <div>
+        @if (!string.IsNullOrEmpty(Secao))
+        {
+            <div class="eyebrow">@Secao</div>
+        }
+        <h1>@Titulo</h1>
+        @if (!string.IsNullOrEmpty(Descricao))
+        {
+            <p>@Descricao</p>
+        }
+    </div>
+    @if (Acoes is not null)
+    {
+        <div class="linha">@Acoes</div>
+    }
+</div>
+@code {
+    [Parameter] public string? Secao { get; set; }
+    [Parameter] public string Titulo { get; set; } = "";
+    [Parameter] public string? Descricao { get; set; }
+    [Parameter] public RenderFragment? Acoes { get; set; }
+}

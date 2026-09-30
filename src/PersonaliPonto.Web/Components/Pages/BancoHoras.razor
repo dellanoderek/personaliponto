@@ -1,0 +1,149 @@
+@page "/banco-horas"
+@attribute [Authorize(Policy = Politicas.Empresa)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Banco de horas — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Operação" Titulo="Banco de horas" Descricao="Livro-razão auditável: créditos e débitos do fechamento mensal, compensações e ajustes manuais. Nada é apagado — correções são feitas por estorno.">
+    <Acoes>
+        <a class="btn btn-secundario" href="/download/relatorio/banco-horas" target="_blank"><Icone Nome="download" />Exportar saldos</a>
+    </Acoes>
+</Cabecalho>
+
+<div class="grade grade-3">
+    <div class="card">
+        <div class="card-cab"><h2>Saldos</h2><input type="search" placeholder="Buscar" style="max-width:160px" @bind="_busca" @bind:event="oninput" /></div>
+        <div class="tabela-wrap" style="max-height:640px;overflow:auto">
+            <table class="tabela">
+                <tbody>
+                    @foreach (var s in _saldos.Where(x => string.IsNullOrWhiteSpace(_busca) || x.Nome.Contains(_busca, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <tr class="clicavel" style="@(s.Id == _sel ? "background:var(--fundo-azul)" : "")" @onclick="() => Selecionar(s.Id)">
+                            <td>@s.Nome</td>
+                            <td class="num" style="font-weight:700;color:@(s.Saldo < 0 ? "var(--vermelho)" : "var(--azul)")">@Formato.Hhmm(s.Saldo)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card span-2">
+        @if (_sel is null)
+        {
+            <Vazio Texto="Selecione um funcionário para ver o extrato." Icone="banco" />
+        }
+        else
+        {
+            <div class="card-cab">
+                <div><h2>@_saldos.First(x => x.Id == _sel).Nome</h2><div class="small muted">Saldo atual: <b>@Formato.Hhmm(_extrato.Sum(l => l.Minutos))</b></div></div>
+                @if (_rh)
+                {
+                    <button class="btn btn-primario btn-sm" @onclick="() => _modal = true"><Icone Nome="mais" />Lançamento</button>
+                }
+            </div>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th class="num">Minutos</th><th>Por</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var l in _extrato)
+                        {
+                            var estornado = _extrato.Any(x => x.EstornaLancamentoId == l.Id);
+                            <tr style="@(estornado ? "opacity:.55" : "")">
+                                <td class="nowrap">@l.Data.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge b-azul">@l.Tipo</span></td>
+                                <td>@l.Descricao</td>
+                                <td class="num" style="color:@(l.Minutos < 0 ? "var(--vermelho)" : "var(--verde)")">@Formato.Hhmm(l.Minutos)</td>
+                                <td class="small">@l.CriadoPorNome</td>
+                                <td class="right">
+                                    @if (_rh && !estornado && l.FechamentoId is null && l.Tipo != TipoLancamentoBancoHoras.Estorno)
+                                    {
+                                        <button class="btn btn-perigo btn-sm" @onclick="() => Estornar(l)">Estornar</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (_extrato.Count == 0)
+                {
+                    <Vazio Texto="Sem lançamentos." Icone="banco" />
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="Novo lançamento">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-6">
+                <label>Tipo</label>
+                <select @bind="_tipo">
+                    <option value="@TipoLancamentoBancoHoras.Compensacao">Compensação (folga)</option>
+                    <option value="@TipoLancamentoBancoHoras.Pagamento">Pagamento em folha</option>
+                    <option value="@TipoLancamentoBancoHoras.AjusteManual">Ajuste manual (+/−)</option>
+                </select>
+            </div>
+            <div class="campo c-3"><label>Data</label><input type="date" @bind="_data" /></div>
+            <div class="campo c-3"><label>Horas (hh:mm)</label><input type="text" placeholder="02:30 ou -01:00" @bind="_horas" /></div>
+            <div class="campo c-12"><label>Descrição</label><input type="text" @bind="_descricao" /></div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Lancar">Lançar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private sealed record LinhaSaldo(Guid Id, string Nome, int Saldo);
+    private List<LinhaSaldo> _saldos = [];
+    private List<BancoHorasLancamento> _extrato = [];
+    private Guid? _sel;
+    private string _busca = "";
+    private bool _rh, _modal;
+    private TipoLancamentoBancoHoras _tipo = TipoLancamentoBancoHoras.Compensacao;
+    private DateOnly _data = Hoje;
+    private string _horas = "";
+    private string _descricao = "";
+
+    protected override async Task CarregarAsync()
+    {
+        _rh = TemPapel(Roles.AdminEmpresa, Roles.RH);
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _saldos = await Db.Funcionarios.AsNoTracking().Where(f => f.Ativo).OrderBy(f => f.Nome)
+            .Select(f => new LinhaSaldo(f.Id, f.Nome, Db.BancoHoras.Where(b => b.FuncionarioId == f.Id).Sum(b => (int?)b.Minutos) ?? 0)).ToListAsync();
+        if (_sel is not null) _extrato = await Svc<BancoHorasService>().ExtratoAsync(_sel.Value, default);
+    }
+
+    private async Task Selecionar(Guid id)
+    {
+        _sel = id;
+        _extrato = await Svc<BancoHorasService>().ExtratoAsync(id, default);
+    }
+
+    private async Task Lancar()
+    {
+        var ok = await Executar(async () =>
+        {
+            var h = _horas.Trim();
+            var neg = h.StartsWith('-');
+            if (!TimeSpan.TryParse(h.TrimStart('-', '+'), out var ts) || ts == TimeSpan.Zero) throw new RegraNegocioException("Informe as horas no formato hh:mm.");
+            var min = (int)ts.TotalMinutes * (neg ? -1 : 1);
+            await Svc<BancoHorasService>().LancarAsync(_sel!.Value, _data, min, _tipo, _descricao, default);
+        }, "Lançamento registrado.");
+        if (ok) { _modal = false; _horas = ""; _descricao = ""; await Recarregar(); }
+    }
+
+    private async Task Estornar(BancoHorasLancamento l)
+    {
+        if (await Executar(() => Svc<BancoHorasService>().EstornarAsync(l.Id, "Estorno pelo RH", default), "Lançamento estornado."))
+            await Recarregar();
+    }
+}

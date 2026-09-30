@@ -1,2 +1,2 @@
 # personaliponto
-Plataforma de Sistema de Ponto
+Sistema de Ponto

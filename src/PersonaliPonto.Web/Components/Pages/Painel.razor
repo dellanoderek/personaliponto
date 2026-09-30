@@ -1,0 +1,191 @@
+@page "/"
+@attribute [Authorize]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.Analytics
+@using PersonaliPonto.Infrastructure.Tempo
+@using PersonaliPonto.Infrastructure.Seguranca
+@using Microsoft.Extensions.Options
+
+<PageTitle>Painel — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Painel" Titulo="Saúde da operação" Descricao="Indicadores de jornada do período, pendências do RH e situação de conformidade do REP-P.">
+    <Acoes>
+        <div class="filtros">
+            <div class="campo"><label>De</label><input type="date" @bind="_inicio" /></div>
+            <div class="campo"><label>Até</label><input type="date" @bind="_fim" /></div>
+            @if (_estabelecimentos.Count > 1)
+            {
+                <div class="campo">
+                    <label>Local</label>
+                    <select @bind="_estabelecimentoId">
+                        <option value="">Todos</option>
+                        @foreach (var e in _estabelecimentos)
+                        {
+                            <option value="@e.Id">@e.Nome</option>
+                        }
+                    </select>
+                </div>
+            }
+            <button class="btn btn-primario" disabled="@Ocupado" @onclick="() => Atualizar(false)">Atualizar</button>
+        </div>
+    </Acoes>
+</Cabecalho>
+
+@if (_ind is null)
+{
+    <Carregando Texto="Calculando indicadores..." />
+}
+else
+{
+    <div class="grade grade-4">
+        <Kpi Rotulo="Funcionários ativos" Valor="@_ind.FuncionariosAtivos.ToString()" Detalhe="@($"{_ind.PresentesAgora} trabalhando agora")" />
+        <Kpi Rotulo="Marcações hoje" Valor="@_ind.MarcacoesHoje.ToString()" Detalhe="app, terminal e web" />
+        <Kpi Rotulo="Horas extras" Valor="@Formato.Hhmm(_ind.TotalExtras)" Detalhe="no período" />
+        <Kpi Rotulo="Absenteísmo" Valor="@($"{_ind.Absenteismo:0.0}%")" Detalhe="@($"{Formato.Hhmm(_ind.TotalFaltas)} faltas · {Formato.Hhmm(_ind.TotalAtrasos)} atrasos")" Estado="@(_ind.Absenteismo > 5 ? "alerta" : null)" />
+    </div>
+
+    <div class="grade grade-3 mt">
+        <div class="card span-2">
+            <div class="card-cab"><h2>Extras, atrasos e faltas por dia</h2><span class="small muted">@_ind.Inicio.ToString("dd/MM") a @_ind.Fim.ToString("dd/MM")</span></div>
+            <div class="card-corpo">
+                <GraficoBarras Pontos="_serie" Series="@(["Extras", "Atrasos", "Faltas"])" Cores="@(["#1166d6", "#21b8ef", "#c0392b"])" Formatar="v => Formato.Hhmm((int)v)" Titulo="Minutos por dia" />
+            </div>
+        </div>
+        <div class="card marinho">
+            <div class="card-corpo">
+                <div class="small" style="color:var(--ciano);font-weight:700;letter-spacing:.1em">PENDÊNCIAS DO RH</div>
+                <h2 style="margin:6px 0 18px">Para tratar</h2>
+                <ul class="timeline">
+                    <li><a href="/solicitacoes" style="color:#fff">@_ind.SolicitacoesPendentes solicitações de ajuste</a><span>aguardando aprovação</span></li>
+                    <li><a href="/atestados" style="color:#fff">@_ind.AtestadosPendentes atestados</a><span>aguardando análise</span></li>
+                    <li><a href="/espelho" style="color:#fff">@_ind.DiasInconsistentes dias com marcações ímpares</a><span>precisam de tratamento</span></li>
+                    <li><a href="/marcacoes" style="color:#fff">@_ind.MarcacoesForaCerca funcionários fora da cerca</a><span>marcações sinalizadas</span></li>
+                    <li>Banco de horas: @Formato.Hhmm(_ind.SaldoBancoHoras)<span>saldo consolidado da equipe</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="grade grade-3 mt">
+        <div class="card span-2">
+            <div class="card-cab">
+                <h2>Funcionários no período</h2>
+                <a class="btn btn-secundario btn-sm" href="@($"/download/relatorio/resumo?inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}")" target="_blank"><Icone Nome="download" />Exportar</a>
+            </div>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>Funcionário</th><th class="num">Trabalhado</th><th class="num">Extras</th><th class="num">Atrasos</th><th class="num">Faltas</th><th class="num">Banco</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var r in _ind.Funcionarios.OrderByDescending(x => x.Faltas + x.Atrasos).Take(12))
+                        {
+                            <tr class="clicavel" @onclick="@(() => Nav.NavigateTo($"/espelho?funcionario={r.FuncionarioId}&inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}"))">
+                                <td><div style="font-weight:600">@r.Nome</div><div class="small muted">@r.Estabelecimento · mat. @r.Matricula</div></td>
+                                <td class="num">@Formato.Hhmm(r.Trabalhado)</td>
+                                <td class="num" style="color:var(--azul)">@Formato.Hhmm(r.Extras)</td>
+                                <td class="num">@Formato.Hhmm(r.Atrasos)</td>
+                                <td class="num" style="@(r.Faltas > 0 ? "color:var(--vermelho)" : "")">@Formato.Hhmm(r.Faltas)</td>
+                                <td class="num">@Formato.Hhmm(r.SaldoBancoHoras)</td>
+                                <td>
+                                    @if (r.DiasInconsistentes > 0)
+                                    {
+                                        <span class="badge b-amarelo">@r.DiasInconsistentes ímpares</span>
+                                    }
+                                    @if (r.ForaDaCerca)
+                                    {
+                                        <span class="badge b-vermelho">fora da cerca</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (_ind.Funcionarios.Count == 0)
+                {
+                    <Vazio Texto="Nenhum funcionário cadastrado." Icone="pessoas"><a class="btn btn-primario mt" href="/funcionarios">Cadastrar funcionários</a></Vazio>
+                }
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-cab"><h2>Conformidade REP-P</h2><span class="small muted">Portaria MTP 671/2021</span></div>
+            <div class="card-corpo pilha" style="gap:12px">
+                <div class="linha entre">
+                    <span>Relógio (NTP.br)</span>
+                    @if (_ntp.Sincronizado)
+                    {
+                        <span class="badge b-verde">sincronizado</span>
+                    }
+                    else
+                    {
+                        <span class="badge b-amarelo">sem sincronização</span>
+                    }
+                </div>
+                @if (_ntp.UltimoDesvio is { } d)
+                {
+                    <div class="small muted" style="margin-top:-8px">Desvio corrigido: @d.TotalSeconds.ToString("0.000") s (@_ntp.UltimoServidor)</div>
+                }
+                <div class="linha entre">
+                    <span>Certificado de assinatura</span>
+                    @if (_certIcp)
+                    {
+                        <span class="badge b-verde">ICP-Brasil</span>
+                    }
+                    else
+                    {
+                        <span class="badge b-vermelho">não ICP-Brasil</span>
+                    }
+                </div>
+                <div class="linha entre">
+                    <span>Registro no INPI</span>
+                    @if (string.IsNullOrWhiteSpace(_inpi))
+                    {
+                        <span class="badge b-vermelho">não configurado</span>
+                    }
+                    else
+                    {
+                        <span class="badge b-verde">@_inpi</span>
+                    }
+                </div>
+                <div class="linha entre"><span>Registros originais</span><span class="badge b-azul">imutáveis</span></div>
+                <div class="linha entre"><span>Isolamento de dados</span><span class="badge b-azul">RLS ativo</span></div>
+                <div class="alerta info small"><Icone Nome="info" /><div>A conformidade efetiva depende da configuração correta, dos documentos técnicos e dos procedimentos adotados pela empresa.</div></div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DateOnly _inicio = InicioMes(Hoje);
+    private DateOnly _fim = Hoje;
+    private Guid? _estabelecimentoId;
+    private IndicadoresEmpresa? _ind;
+    private List<GraficoBarras.Ponto> _serie = [];
+    private List<Estabelecimento> _estabelecimentos = [];
+    private NtpClock _ntp = default!;
+    private bool _certIcp;
+    private string? _inpi;
+
+    protected override async Task CarregarAsync()
+    {
+        if (TemPapel(Roles.SuperAdmin, Roles.Suporte) && TenantId is null)
+        {
+            Nav.NavigateTo("/plataforma");
+            return;
+        }
+        if (!TemPapel(Roles.AdminEmpresa, Roles.RH, Roles.Gestor))
+        {
+            Nav.NavigateTo("/meu-ponto");
+            return;
+        }
+        _ntp = Svc<NtpClock>();
+        _certIcp = Svc<AssinaturaDigital>().CertificadoIcpBrasil;
+        _inpi = Svc<IOptions<RepPOptions>>().Value.NumeroRegistroInpi;
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().Where(e => e.Ativo).OrderBy(e => e.Nome).ToListAsync();
+        await Atualizar(true);
+    }
+
+    private Task Atualizar(bool cache) => Executar(async () =>
+    {
+        _ind = await Svc<AnalyticsService>().IndicadoresAsync(_inicio, _fim, _estabelecimentoId, cache, default);
+        _serie = _ind.Serie.Select(s => new GraficoBarras.Ponto(s.Dia.ToString("dd/MM"), [s.Extras, s.Atrasos, s.Faltas])).ToList();
+    });
+}

@@ -1,0 +1,74 @@
+@page "/plataforma/planos"
+@attribute [Authorize(Policy = Politicas.Plataforma)]
+@inherits PaginaPlataforma
+@using PersonaliPonto.Modules.SaaS.Domain
+
+<PageTitle>Planos — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Super Admin" Titulo="Planos" Descricao="Tabela de preços de referência. Cada cliente pode ter valor negociado no contrato.">
+    <Acoes><button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo plano</button></Acoes>
+</Cabecalho>
+
+<div class="grade grade-4">
+    @foreach (var p in _lista)
+    {
+        <div class="card card-corpo pilha" style="gap:8px;@(p.Ativo ? "" : "opacity:.6")">
+            <h3>@p.Nome</h3>
+            <div style="font-size:26px;font-weight:700;color:var(--titulo)">@(p.PrecoMensal > 0 ? Formato.Moeda(p.PrecoMensal) : "Sob consulta")</div>
+            <div class="small">@(p.LimiteFuncionarios > 0 ? $"até {p.LimiteFuncionarios} funcionários" : "sem limite") · excedente @Formato.Moeda(p.PrecoFuncionarioExcedente)</div>
+            <div class="linha small"><span class="badge @(p.PermiteApp ? "b-verde" : "b-cinza")">app</span><span class="badge @(p.PermiteTerminalWeb ? "b-verde" : "b-cinza")">terminal</span></div>
+            <button class="btn btn-secundario btn-sm" @onclick="() => Editar(p)">Editar</button>
+        </div>
+    }
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="Plano">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-12"><label>Nome</label><input type="text" @bind="_edit.Nome" /></div>
+            <div class="campo c-4"><label>Preço mensal</label><input type="number" step="0.01" @bind="_edit.PrecoMensal" /></div>
+            <div class="campo c-4"><label>Limite de funcionários</label><input type="number" @bind="_edit.LimiteFuncionarios" /></div>
+            <div class="campo c-4"><label>Preço excedente</label><input type="number" step="0.01" @bind="_edit.PrecoFuncionarioExcedente" /></div>
+            <div class="c-12 linha" style="gap:18px">
+                <label class="checkbox"><input type="checkbox" @bind="_edit.PermiteApp" /> Aplicativo</label>
+                <label class="checkbox"><input type="checkbox" @bind="_edit.PermiteTerminalWeb" /> Terminal web</label>
+                <label class="checkbox"><input type="checkbox" @bind="_edit.Ativo" /> Ativo</label>
+            </div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Salvar">Salvar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private List<Plano> _lista = [];
+    private Plano _edit = new();
+    private bool _modal;
+
+    protected override Task CarregarAsync() => Recarregar();
+    private async Task Recarregar() => _lista = await Db.Planos.AsNoTracking().OrderBy(p => p.PrecoMensal).ToListAsync();
+
+    private void Novo() { _edit = new Plano(); _modal = true; }
+
+    private void Editar(Plano p)
+    {
+        _edit = new Plano { Id = p.Id, Nome = p.Nome, PrecoMensal = p.PrecoMensal, LimiteFuncionarios = p.LimiteFuncionarios, PrecoFuncionarioExcedente = p.PrecoFuncionarioExcedente, PermiteApp = p.PermiteApp, PermiteTerminalWeb = p.PermiteTerminalWeb, Ativo = p.Ativo };
+        _modal = true;
+    }
+
+    private async Task Salvar()
+    {
+        var ok = await Executar(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(_edit.Nome)) throw new RegraNegocioException("Informe o nome.");
+            var existente = await Db.Planos.FirstOrDefaultAsync(p => p.Id == _edit.Id);
+            if (existente is null) Db.Planos.Add(_edit);
+            else Db.Entry(existente).CurrentValues.SetValues(_edit);
+            Svc<AuditService>().Registrar("plano.salvo", nameof(Plano), _edit.Id, new { _edit.Nome, _edit.PrecoMensal });
+            await Db.SaveChangesAsync();
+        }, "Plano salvo.");
+        if (ok) { _modal = false; await Recarregar(); }
+    }
+}

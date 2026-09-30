@@ -1,0 +1,229 @@
+@page "/jornadas"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+@using PersonaliPonto.Core.RepP.Apuracao
+
+<PageTitle>Jornadas — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Cadastros" Titulo="Jornadas e escalas" Descricao="Horários contratuais usados na apuração, no espelho e no registro tipo 04 do AEJ. Suporta turno fixo, 5x2, 6x1, 12x36 e escalas cíclicas.">
+    <Acoes><button class="btn btn-primario" @onclick="Nova"><Icone Nome="mais" />Nova jornada</button></Acoes>
+</Cabecalho>
+
+@if (_lista.Count == 0)
+{
+    <div class="card"><Vazio Texto="Nenhuma jornada cadastrada." Icone="calendario"><button class="btn btn-primario mt" @onclick="Nova">Criar a primeira</button></Vazio></div>
+}
+else
+{
+    <div class="grade grade-3">
+        @foreach (var j in _lista)
+        {
+            <div class="card">
+                <div class="card-cab">
+                    <div class="linha"><span class="numero">@(j.Codigo.Length > 3 ? j.Codigo[..3] : j.Codigo)</span><div><h3>@j.Nome</h3><div class="small muted">@Tipo(j.Tipo) · tolerância @j.ToleranciaDiariaMinutos min/dia</div></div></div>
+                    <button class="btn btn-secundario btn-sm" @onclick="() => Editar(j)"><Icone Nome="editar" /></button>
+                </div>
+                <div class="card-corpo small">
+                    @foreach (var h in j.Horarios.OrderBy(x => x.Indice))
+                    {
+                        <div class="linha entre" style="padding:3px 0;border-bottom:1px dashed var(--borda)">
+                            <span style="color:var(--titulo);font-weight:600">@RotuloDia(j, h.Indice)</span>
+                            <span>@(EspelhoService.DescreverHorario(h) ?? "folga") · @Formato.Hhmm(ApuracaoJornada.MinutosPrevistos(h, Hoje, new ParametrosApuracao()))</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<Modal @bind-Aberto="_modal" Titulo="@(_edit.Id == Guid.Empty ? "Nova jornada" : "Editar jornada")" Grande="true">
+    <ChildContent>
+        @if (_edit.Id == Guid.Empty)
+        {
+            <div class="linha" style="margin-bottom:14px">
+                <span class="small">Modelos:</span>
+                <button class="btn btn-secundario btn-sm" @onclick="() => Modelo(TipoJornada.Semanal5x2)">5x2 (44h)</button>
+                <button class="btn btn-secundario btn-sm" @onclick="() => Modelo(TipoJornada.Semanal6x1)">6x1 (44h)</button>
+                <button class="btn btn-secundario btn-sm" @onclick="() => Modelo(TipoJornada.Escala12x36)">12x36</button>
+            </div>
+        }
+        <div class="form-grade">
+            <div class="campo c-3"><label>Código</label><input type="text" maxlength="20" @bind="_edit.Codigo" /></div>
+            <div class="campo c-5"><label>Nome</label><input type="text" @bind="_edit.Nome" /></div>
+            <div class="campo c-4">
+                <label>Tipo</label>
+                <select @bind="_edit.Tipo" @bind:after="AjustarTipo">
+                    <option value="@TipoJornada.Fixa">Turno fixo</option>
+                    <option value="@TipoJornada.Semanal5x2">5x2</option>
+                    <option value="@TipoJornada.Semanal6x1">6x1</option>
+                    <option value="@TipoJornada.Escala12x36">12x36</option>
+                    <option value="@TipoJornada.Personalizada">Escala cíclica personalizada</option>
+                </select>
+            </div>
+            @if (Ciclica)
+            {
+                <div class="campo c-3"><label>Dias no ciclo</label><input type="number" min="2" max="60" @bind="_ciclo" @bind:after="AjustarCiclo" /></div>
+                <div class="campo c-3"><label>Início do ciclo (dia 1)</label><input type="date" @bind="_edit.DataReferenciaCiclo" /></div>
+            }
+            <div class="campo c-3"><label>Tolerância diária (min)</label><input type="number" min="0" max="10" @bind="_edit.ToleranciaDiariaMinutos" /><span class="ajuda">CLT art. 58 §1º: até 10 min</span></div>
+            <div class="c-3 linha" style="align-self:center"><label class="checkbox"><input type="checkbox" @bind="_edit.Ativo" /> Ativa</label></div>
+        </div>
+
+        <table class="tabela mt">
+            <thead><tr><th>Dia</th><th>1º período</th><th>2º período</th><th>3º período</th><th class="num">Total</th></tr></thead>
+            <tbody>
+                @foreach (var h in _dias)
+                {
+                    <tr>
+                        <td style="font-weight:600">@RotuloDia(_edit, h.Indice)</td>
+                        @for (var p = 0; p < 3; p++)
+                        {
+                            var idx = p;
+                            <td>
+                                <div class="linha" style="gap:4px;flex-wrap:nowrap">
+                                    <input type="time" style="width:108px" value="@Valor(h, idx, true)" @onchange="e => Definir(h, idx, true, e.Value?.ToString())" />
+                                    <input type="time" style="width:108px" value="@Valor(h, idx, false)" @onchange="e => Definir(h, idx, false, e.Value?.ToString())" />
+                                </div>
+                            </td>
+                        }
+                        <td class="num">@Formato.Hhmm(ApuracaoJornada.MinutosPrevistos(Converter(h), Hoje, new ParametrosApuracao()))</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="small muted mt">Deixe em branco os dias de folga. Horários noturnos consideram a hora reduzida (52min30s) no total.</p>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Salvar">Salvar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private sealed class DiaEdicao
+    {
+        public int Indice { get; set; }
+        public TimeOnly?[] Entradas { get; } = new TimeOnly?[3];
+        public TimeOnly?[] Saidas { get; } = new TimeOnly?[3];
+    }
+
+    private List<Jornada> _lista = [];
+    private Jornada _edit = new();
+    private List<DiaEdicao> _dias = [];
+    private int _ciclo = 2;
+    private bool _modal;
+    private static readonly string[] Semana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+    private bool Ciclica => _edit.Tipo is TipoJornada.Escala12x36 or TipoJornada.Personalizada;
+
+    protected override async Task CarregarAsync() => _lista = await Db.Jornadas.AsNoTracking().OrderBy(j => j.Codigo).ToListAsync();
+
+    private static string Tipo(TipoJornada t) => t switch
+    {
+        TipoJornada.Fixa => "Turno fixo", TipoJornada.Semanal5x2 => "5x2", TipoJornada.Semanal6x1 => "6x1",
+        TipoJornada.Escala12x36 => "12x36", _ => "Escala cíclica"
+    };
+
+    private static string RotuloDia(Jornada j, int indice) =>
+        j.CicloDias is > 0 ? $"Dia {indice + 1} do ciclo" : Semana[indice];
+
+    private void Nova()
+    {
+        Carregar(new Jornada { Tipo = TipoJornada.Semanal5x2, ToleranciaDiariaMinutos = 10, Ativo = true });
+        Modelo(TipoJornada.Semanal5x2);
+        _modal = true;
+    }
+
+    private void Editar(Jornada j)
+    {
+        Carregar(new Jornada
+        {
+            Id = j.Id, TenantId = j.TenantId, Codigo = j.Codigo, Nome = j.Nome, Tipo = j.Tipo, CicloDias = j.CicloDias, DataReferenciaCiclo = j.DataReferenciaCiclo,
+            ToleranciaMinutos = j.ToleranciaMinutos, ToleranciaDiariaMinutos = j.ToleranciaDiariaMinutos, Horarios = j.Horarios, Ativo = j.Ativo
+        });
+        _modal = true;
+    }
+
+    private void Carregar(Jornada j)
+    {
+        _edit = j;
+        _ciclo = j.CicloDias ?? 2;
+        var n = j.CicloDias is > 0 ? j.CicloDias.Value : 7;
+        _dias = Enumerable.Range(0, n).Select(i =>
+        {
+            var d = new DiaEdicao { Indice = i };
+            var h = j.Horarios.FirstOrDefault(x => x.Indice == i);
+            if (h is not null)
+                for (var p = 0; p < Math.Min(3, h.Periodos.Count); p++)
+                {
+                    d.Entradas[p] = h.Periodos[p].Entrada;
+                    d.Saidas[p] = h.Periodos[p].Saida;
+                }
+            return d;
+        }).ToList();
+    }
+
+    private void Modelo(TipoJornada t)
+    {
+        var m = CadastroService.Modelo(t, string.IsNullOrWhiteSpace(_edit.Codigo) ? t switch { TipoJornada.Escala12x36 => "12X36", TipoJornada.Semanal6x1 => "6X1", _ => "5X2" } : _edit.Codigo,
+            string.IsNullOrWhiteSpace(_edit.Nome) ? t switch { TipoJornada.Escala12x36 => "Escala 12x36", TipoJornada.Semanal6x1 => "Comercial 6x1", _ => "Comercial 5x2" } : _edit.Nome);
+        m.Id = _edit.Id;
+        m.ToleranciaDiariaMinutos = _edit.ToleranciaDiariaMinutos;
+        m.Ativo = true;
+        if (m.DataReferenciaCiclo is not null) m.DataReferenciaCiclo = Hoje;
+        Carregar(m);
+    }
+
+    private void AjustarTipo()
+    {
+        if (Ciclica)
+        {
+            _edit.CicloDias ??= _edit.Tipo == TipoJornada.Escala12x36 ? 2 : _ciclo;
+            _edit.DataReferenciaCiclo ??= Hoje;
+        }
+        else
+        {
+            _edit.CicloDias = null;
+            _edit.DataReferenciaCiclo = null;
+        }
+        Carregar(ComHorarios());
+    }
+
+    private void AjustarCiclo()
+    {
+        _edit.CicloDias = Math.Clamp(_ciclo, 2, 60);
+        Carregar(ComHorarios());
+    }
+
+    private string Valor(DiaEdicao d, int p, bool entrada) => (entrada ? d.Entradas[p] : d.Saidas[p])?.ToString("HH:mm") ?? "";
+
+    private void Definir(DiaEdicao d, int p, bool entrada, string? v)
+    {
+        TimeOnly? t = TimeOnly.TryParse(v, out var x) ? x : null;
+        if (entrada) d.Entradas[p] = t; else d.Saidas[p] = t;
+    }
+
+    private static HorarioDia Converter(DiaEdicao d) => new()
+    {
+        Indice = d.Indice,
+        Periodos = Enumerable.Range(0, 3).Where(p => d.Entradas[p] is not null && d.Saidas[p] is not null)
+            .Select(p => new Periodo { Entrada = d.Entradas[p]!.Value, Saida = d.Saidas[p]!.Value }).ToList()
+    };
+
+    private Jornada ComHorarios()
+    {
+        _edit.Horarios = _dias.Select(Converter).Where(h => h.Periodos.Count > 0).ToList();
+        return _edit;
+    }
+
+    private Task Salvar() => Executar(async () =>
+    {
+        if (_dias.Any(d => Enumerable.Range(0, 3).Any(p => (d.Entradas[p] is null) != (d.Saidas[p] is null))))
+            throw new RegraNegocioException("Preencha entrada e saída de cada período (ou deixe ambos vazios).");
+        if (Ciclica) _edit.CicloDias = _dias.Count;
+        await Svc<CadastroService>().SalvarJornadaAsync(ComHorarios(), default);
+        _modal = false;
+        _lista = await Db.Jornadas.AsNoTracking().OrderBy(j => j.Codigo).ToListAsync();
+    }, "Jornada salva.");
+}

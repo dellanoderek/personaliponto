@@ -1,0 +1,172 @@
+@page "/fechamento"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Fechamento — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Operação" Titulo="Fechamento mensal" Descricao="Consolida a apuração do mês, lança extras e débitos no banco de horas e bloqueia novos tratamentos no período. Dias com marcações ímpares impedem o fechamento.">
+    <Acoes>
+        <div class="campo"><input type="month" value="@_mes.ToString("yyyy-MM")" @onchange="MudarMes" /></div>
+        <button class="btn btn-primario" disabled="@(Ocupado || !_selecionados.Any())" @onclick="FecharSelecionados"><Icone Nome="cadeado" />Fechar selecionados (@_selecionados.Count)</button>
+    </Acoes>
+</Cabecalho>
+
+@if (_progresso is not null)
+{
+    <div class="alerta info"><span class="spinner"></span><div>@_progresso</div></div>
+}
+
+<div class="card mt">
+    <table class="tabela">
+        <thead>
+            <tr>
+                <th style="width:36px"><input type="checkbox" checked="@(_selecionados.Count > 0 && _selecionados.Count == Abertos.Count())" @onchange="MarcarTodos" /></th>
+                <th>Funcionário</th><th>Situação</th><th class="num">Trabalhado</th><th class="num">Extras</th><th class="num">Atrasos</th><th class="num">Faltas</th><th>Assinatura</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var f in _funcionarios)
+            {
+                var fe = _fechamentos.GetValueOrDefault(f.Id);
+                var fechado = fe?.Status == StatusFechamento.Fechado;
+                <tr>
+                    <td>
+                        @if (!fechado)
+                        {
+                            <input type="checkbox" checked="@_selecionados.Contains(f.Id)" @onchange="e => Alternar(f.Id, (bool)e.Value!)" />
+                        }
+                    </td>
+                    <td><div style="font-weight:600">@f.Nome</div><div class="small muted">mat. @f.Matricula</div></td>
+                    <td>
+                        @if (fechado)
+                        {
+                            <span class="badge b-verde">fechado</span>
+                        }
+                        else if (fe?.Status == StatusFechamento.Reaberto)
+                        {
+                            <span class="badge b-amarelo">reaberto</span>
+                        }
+                        else
+                        {
+                            <span class="badge b-cinza">aberto</span>
+                        }
+                    </td>
+                    <td class="num">@(fechado ? Formato.Hhmm(fe!.MinutosTrabalhados) : "—")</td>
+                    <td class="num">@(fechado ? Formato.Hhmm(fe!.MinutosExtras) : "—")</td>
+                    <td class="num">@(fechado ? Formato.Hhmm(fe!.MinutosAtrasos) : "—")</td>
+                    <td class="num">@(fechado ? Formato.Hhmm(fe!.MinutosFaltas) : "—")</td>
+                    <td>
+                        @if (_assinaturas.TryGetValue(f.Id, out var concorda))
+                        {
+                            <span class="badge @(concorda ? "b-verde" : "b-vermelho")">@(concorda ? "assinado" : "com ressalva")</span>
+                        }
+                        else
+                        {
+                            <span class="small muted">pendente</span>
+                        }
+                    </td>
+                    <td class="right nowrap">
+                        <a class="btn btn-fantasma btn-sm" href="@($"/espelho?funcionario={f.Id}&inicio={_mes:yyyy-MM-dd}&fim={_mes.AddMonths(1).AddDays(-1):yyyy-MM-dd}")">Espelho</a>
+                        @if (fechado)
+                        {
+                            <button class="btn btn-secundario btn-sm" @onclick="() => AbrirReabertura(fe!)">Reabrir</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_erros.Count > 0)
+{
+    <div class="alerta erro mt"><Icone Nome="alerta" /><div><b>Não foi possível fechar:</b><ul style="margin:6px 0 0;padding-left:18px">@foreach (var e in _erros) { <li>@e</li> }</ul></div></div>
+}
+
+<Modal @bind-Aberto="_modalReabrir" Titulo="Reabrir fechamento">
+    <ChildContent>
+        <p>Os lançamentos do banco de horas deste fechamento serão estornados. O histórico permanece.</p>
+        <div class="campo"><label>Motivo</label><input type="text" @bind="_motivo" /></div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalReabrir = false">Cancelar</button>
+        <button class="btn btn-perigo" disabled="@Ocupado" @onclick="Reabrir">Reabrir</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private DateOnly _mes = InicioMes(Hoje).AddMonths(-1);
+    private List<Funcionario> _funcionarios = [];
+    private Dictionary<Guid, FechamentoPeriodo> _fechamentos = [];
+    private Dictionary<Guid, bool> _assinaturas = [];
+    private HashSet<Guid> _selecionados = [];
+    private List<string> _erros = [];
+    private string? _progresso;
+    private bool _modalReabrir;
+    private FechamentoPeriodo? _reabrir;
+    private string _motivo = "";
+
+    private IEnumerable<Funcionario> Abertos => _funcionarios.Where(f => _fechamentos.GetValueOrDefault(f.Id)?.Status != StatusFechamento.Fechado);
+
+    protected override Task CarregarAsync() => Recarregar();
+
+    private async Task Recarregar()
+    {
+        var fimMes = _mes.AddMonths(1).AddDays(-1);
+        _funcionarios = await Db.Funcionarios.AsNoTracking().Where(f => f.DataAdmissao <= fimMes && (f.DataDemissao == null || f.DataDemissao >= _mes))
+            .OrderBy(f => f.Nome).ToListAsync();
+        _fechamentos = await Db.Fechamentos.AsNoTracking().Where(f => f.Ano == _mes.Year && f.Mes == _mes.Month).ToDictionaryAsync(f => f.FuncionarioId);
+        _assinaturas = await Db.AssinaturasEspelho.AsNoTracking().Where(a => a.Ano == _mes.Year && a.Mes == _mes.Month)
+            .GroupBy(a => a.FuncionarioId).Select(g => new { g.Key, g.OrderByDescending(x => x.AssinadoEm).First().Concorda })
+            .ToDictionaryAsync(x => x.Key, x => x.Concorda);
+        _selecionados.Clear();
+    }
+
+    private async Task MudarMes(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value + "-01", out var d)) { _mes = d; _erros.Clear(); await Recarregar(); }
+    }
+
+    private void Alternar(Guid id, bool marcado) { if (marcado) _selecionados.Add(id); else _selecionados.Remove(id); }
+
+    private void MarcarTodos(ChangeEventArgs e)
+    {
+        _selecionados = (bool)e.Value! ? Abertos.Select(f => f.Id).ToHashSet() : [];
+    }
+
+    private async Task FecharSelecionados()
+    {
+        _erros.Clear();
+        var ids = _selecionados.ToList();
+        var ok = 0;
+        for (var i = 0; i < ids.Count; i++)
+        {
+            var f = _funcionarios.First(x => x.Id == ids[i]);
+            _progresso = $"Fechando {i + 1} de {ids.Count}: {f.Nome}";
+            StateHasChanged();
+            try
+            {
+                await Svc<FechamentoService>().FecharAsync(f.Id, _mes.Year, _mes.Month, default);
+                ok++;
+            }
+            catch (Exception ex)
+            {
+                Db.ChangeTracker.Clear();
+                _erros.Add($"{f.Nome}: {Notificacoes.Mensagem(ex)}");
+            }
+        }
+        _progresso = null;
+        if (ok > 0) Avisos.Sucesso($"{ok} fechamento(s) concluído(s).");
+        await Recarregar();
+    }
+
+    private void AbrirReabertura(FechamentoPeriodo f) { _reabrir = f; _motivo = ""; _modalReabrir = true; }
+
+    private async Task Reabrir()
+    {
+        var ok = await Executar(() => Svc<FechamentoService>().ReabrirAsync(_reabrir!.Id, _motivo, default), "Fechamento reaberto.");
+        if (ok) { _modalReabrir = false; await Recarregar(); }
+    }
+}

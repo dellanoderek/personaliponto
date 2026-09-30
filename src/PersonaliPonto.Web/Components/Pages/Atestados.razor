@@ -1,0 +1,184 @@
+@page "/atestados"
+@attribute [Authorize(Policy = Politicas.Empresa)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Atestados — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Operação" Titulo="Atestados e justificativas" Descricao="Documentos enviados pelos funcionários ou lançados pelo RH. Imagens são convertidas para WebP e comprimidas antes de armazenar; atestados aprovados abonam as faltas do período.">
+    <Acoes>
+        @if (_rh)
+        {
+            <button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Lançar atestado</button>
+        }
+    </Acoes>
+</Cabecalho>
+
+<div class="abas">
+    <button class="@(_status == StatusSolicitacao.Pendente ? "ativa" : "")" @onclick="() => Filtrar(StatusSolicitacao.Pendente)">Pendentes</button>
+    <button class="@(_status == StatusSolicitacao.Aprovada ? "ativa" : "")" @onclick="() => Filtrar(StatusSolicitacao.Aprovada)">Aprovados</button>
+    <button class="@(_status == StatusSolicitacao.Recusada ? "ativa" : "")" @onclick="() => Filtrar(StatusSolicitacao.Recusada)">Recusados</button>
+</div>
+
+<div class="card">
+    @if (_lista.Count == 0)
+    {
+        <Vazio Texto="Nenhum atestado nesta situação." Icone="atestado" />
+    }
+    else
+    {
+        <table class="tabela">
+            <thead><tr><th>Funcionário</th><th>Tipo</th><th>Período</th><th>Observação</th><th>Arquivo</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var a in _lista)
+                {
+                    <tr>
+                        <td style="font-weight:600">@_nomes.GetValueOrDefault(a.FuncionarioId)</td>
+                        <td>@Tipo(a.Tipo)</td>
+                        <td class="nowrap">@a.DataInicio.ToString("dd/MM/yyyy")@(a.DataFim != a.DataInicio ? $" a {a.DataFim:dd/MM/yyyy}" : "")</td>
+                        <td>@a.Observacao @if (a.ParecerRh is not null) { <div class="small muted">RH: @a.ParecerRh</div> }</td>
+                        <td>
+                            @if (a.ArquivoId is { } arq)
+                            {
+                                <a class="btn btn-fantasma btn-sm" href="@($"/download/arquivo/{arq}")" target="_blank"><Icone Nome="download" />Ver</a>
+                            }
+                            else
+                            {
+                                <span class="muted small">—</span>
+                            }
+                        </td>
+                        <td class="right nowrap">
+                            @if (a.Status == StatusSolicitacao.Pendente && _rh)
+                            {
+                                <button class="btn btn-sucesso btn-sm" @onclick="() => Analisar(a, true)">Aprovar</button>
+                                <button class="btn btn-perigo btn-sm" @onclick="() => Analisar(a, false)">Recusar</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+<Modal @bind-Aberto="_modalAnalise" Titulo="@(_aprovar ? "Aprovar atestado" : "Recusar atestado")">
+    <ChildContent>
+        <div class="campo"><label>@(_aprovar ? "Parecer (opcional)" : "Motivo da recusa")</label><input type="text" @bind="_parecer" /></div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalAnalise = false">Cancelar</button>
+        <button class="btn @(_aprovar ? "btn-sucesso" : "btn-perigo")" disabled="@Ocupado" @onclick="ConfirmarAnalise">Confirmar</button>
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modalNovo" Titulo="Lançar atestado">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-12">
+                <label>Funcionário</label>
+                <select @bind="_funcionarioId">
+                    @foreach (var (id, nome) in _nomes.OrderBy(x => x.Value))
+                    {
+                        <option value="@id">@nome</option>
+                    }
+                </select>
+            </div>
+            <div class="campo c-6">
+                <label>Tipo</label>
+                <select @bind="_tipo">
+                    @foreach (var t in Enum.GetValues<TipoAtestado>())
+                    {
+                        <option value="@t">@Tipo(t)</option>
+                    }
+                </select>
+            </div>
+            <div class="campo c-3"><label>Início</label><input type="date" @bind="_inicio" /></div>
+            <div class="campo c-3"><label>Fim</label><input type="date" @bind="_fim" /></div>
+            <div class="campo c-12"><label>Observação</label><input type="text" @bind="_obs" /></div>
+            <div class="campo c-12">
+                <label>Arquivo (imagem ou PDF, até 10 MB)</label>
+                <InputFile OnChange="Selecionar" accept="image/*,application/pdf" />
+                @if (_arquivo is not null)
+                {
+                    <span class="ajuda">@_nomeArquivo (@(_arquivo.Length / 1024) KB)</span>
+                }
+            </div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalNovo = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Salvar">Salvar e aprovar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private StatusSolicitacao _status = StatusSolicitacao.Pendente;
+    private List<Atestado> _lista = [];
+    private Dictionary<Guid, string> _nomes = [];
+    private bool _rh, _modalAnalise, _modalNovo, _aprovar;
+    private Atestado? _sel;
+    private string _parecer = "";
+    private Guid _funcionarioId;
+    private TipoAtestado _tipo = TipoAtestado.AtestadoMedico;
+    private DateOnly _inicio = Hoje, _fim = Hoje;
+    private string? _obs, _nomeArquivo;
+    private byte[]? _arquivo;
+
+    protected override async Task CarregarAsync()
+    {
+        _rh = TemPapel(Roles.AdminEmpresa, Roles.RH);
+        _nomes = await Db.Funcionarios.AsNoTracking().Where(f => f.Ativo).ToDictionaryAsync(f => f.Id, f => f.Nome);
+        await Recarregar();
+    }
+
+    private async Task Recarregar() =>
+        _lista = await Db.Atestados.AsNoTracking().Where(a => a.Status == _status).OrderByDescending(a => a.CriadoEm).Take(300).ToListAsync();
+
+    private async Task Filtrar(StatusSolicitacao s) { _status = s; await Recarregar(); }
+
+    public static string Tipo(TipoAtestado t) => t switch
+    {
+        TipoAtestado.AtestadoMedico => "Atestado médico",
+        TipoAtestado.DeclaracaoComparecimento => "Declaração de comparecimento",
+        TipoAtestado.LicencaLegal => "Licença legal",
+        _ => "Justificativa"
+    };
+
+    private void Analisar(Atestado a, bool aprovar) { _sel = a; _aprovar = aprovar; _parecer = ""; _modalAnalise = true; }
+
+    private async Task ConfirmarAnalise()
+    {
+        var ok = await Executar(() => Svc<AtestadoService>().AnalisarAsync(_sel!.Id, _aprovar, _parecer, default), "Atestado analisado.");
+        if (ok) { _modalAnalise = false; await Recarregar(); }
+    }
+
+    private void Novo()
+    {
+        _funcionarioId = _nomes.OrderBy(x => x.Value).FirstOrDefault().Key;
+        _inicio = _fim = Hoje;
+        _obs = null;
+        _arquivo = null;
+        _modalNovo = true;
+    }
+
+    private async Task Selecionar(InputFileChangeEventArgs e)
+    {
+        if (e.File.Size > PersonaliPonto.Core.RepP.Services.ArquivoService.TamanhoMaximo) { Avisos.Erro("Arquivo acima de 10 MB."); return; }
+        using var ms = new MemoryStream();
+        await e.File.OpenReadStream(PersonaliPonto.Core.RepP.Services.ArquivoService.TamanhoMaximo).CopyToAsync(ms);
+        _arquivo = ms.ToArray();
+        _nomeArquivo = e.File.Name;
+    }
+
+    private async Task Salvar()
+    {
+        var ok = await Executar(async () =>
+        {
+            var svc = Svc<AtestadoService>();
+            var a = await svc.EnviarAsync(_funcionarioId, _tipo, _inicio, _fim, null, _obs, _nomeArquivo, _arquivo, default);
+            await svc.AnalisarAsync(a.Id, true, "Lançado pelo RH", default);
+        }, "Atestado lançado e aprovado.");
+        if (ok) { _modalNovo = false; _status = StatusSolicitacao.Aprovada; await Recarregar(); }
+    }
+}

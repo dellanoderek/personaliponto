@@ -1,0 +1,10 @@
+<div class="vazio">
+    <Icone Nome="@Icone" />
+    <div>@Texto</div>
+    @ChildContent
+</div>
+@code {
+    [Parameter] public string Texto { get; set; } = "Nada por aqui ainda.";
+    [Parameter] public string Icone { get; set; } = "info";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

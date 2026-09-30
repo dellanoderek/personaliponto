@@ -1,0 +1,424 @@
+Fonte oficial: Portaria MTP nº 671/2021 (texto consolidado no DOU) — https://www.in.gov.br/en/web/dou/-/portaria-359094139
+Extraído em 2026-09-28. Anexos V (AFD) e VI (AEJ).
+
+Anexo V
+ARQUIVO FONTE DE DADOS - AFD
+O AFD deve:
+1. Apresentar o formato predeterminado neste anexo.
+2. Apresentar-se no formato texto, codificado no padrão ASCII da norma ISO 8859-1.
+3. Apresentar-se com cada linha correspondente a um registro, terminando com os caracteres 13 e 10, respectivamente, da tabela ASCII da norma ISO 8859-1.
+4. Ordenar os registros pelo Número Sequencial de Registro - NSR.
+5. Não conter linhas em branco.
+6. Os tipos dos dados nos campos podem ser:
+1. N: numérico;
+2. A: alfanumérico;
+3. D: data, no formato "AAAA-MM-dd", onde:
+4. AAAA: ano;
+5. MM: mês;
+6. dd: dia do mês; e
+7. DH: data e hora, no formato "AAAA-MM-ddThh:mm:00ZZZZZ", onde:
+8. AAAA: ano;
+9. MM: mês;
+10. dd: dia do mês;
+11. T: fixo com valor "T";
+12. hh: hora (00 a 23);
+13. mm: minutos (00 a 59);
+14. 00: segundos (fixos com valor "00");
+15. ZZZZZ: fuso horário, onde o primeiro digito representa o sinal (positivo ou negativo) e os outros quatro dígitos representam a hora e os minutos.
+16. O preenchimento dos campos deve se iniciar pela esquerda e posições não utilizadas devem ser preenchidas com espaço.
+17. Para os registros dos tipos "1" a "5" deve ser gravado o Código de Verificação de Redundância, utilizando o CRC-16 (Cyclic Redundancy Check) do registro.
+18. O registro do tipo "7" deve utilizar o padrão SHA-256 (Secure Hash Algorithm - 256 bits) na geração do campo nº 8 (código hash).
+19. Ser nomeado pela junção da palavra "AFD" com:
+1. para o REP-C: número de fabricação do REP, CNPJ/CPF do empregador e "REP_C";
+2. para o REP-A: CNPJ/CPF do empregador e "REP_A"; e
+3. para o REP-P: número de registro no INPI, CNPJ/CPF do empregador e "REP_P".
+Este arquivo é composto dos seguintes tipos de registro:
+Registro do tipo "1" - Cabeçalho
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | "000000000".
+2 | 010-010 | 1 | N | Tipo do registro. Preencher com "1".
+3 | 011-011 | 1 | N | Tipo de identificador do empregador:
+- "1": CNPJ;
+- "2": CPF.  4  012-025  14  N
+CNPJ ou CPF do empregador. | 5 | 026-039 | 14 | N
+CNO (Cadastro Nacional de Obras) ou CAEPF (Cadastro de Atividade Econômica da Pessoa Física), quando existir. | 6 | 040-189 | 150 | A
+Razão social ou nome do empregador. | 7 | 190-206 | 17 | N
+Preencher com:
+- Número de fabricação, no caso de REP-C;
+- Número do processo do último acordo ou convenção coletiva depositado, no caso de REP-A (caso não haja, informar "99999999999999999");
+- Número de registro no INPI, no caso de REP-P.  8  207-216  10  D
+Data inicial dos registros no arquivo. | 9 | 217-226 | 10 | D
+Data final dos registros no arquivo. | 10 | 227-250 | 24 | DH
+Data e hora da geração do arquivo. | 11 | 251-253 | 3 | N
+Versão do leiaute do AFD. Preencher com "003". | 12 | 254-254 | 1 | N
+Tipo de identificador do fabricante ou desenvolvedor do REP:
+- "1": CNPJ;
+- "2": CPF.  13  255-268  14  N
+CNPJ ou CPF do fabricante ou desenvolvedor do REP. | 14 | 269-298 | 30 | A
+Modelo, no caso de REP-C. | 15 | 299-302 | 4 | A
+CRC-16 do registro. Observação: Exemplo para o campo tipo DH (data e hora): 2021-04-27T16:44:00-0300.
+Registro do tipo "2" - Inclusão ou alteração da identificação da empresa no REP
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | NSR.
+2 | 010-010 | 1 | N | Tipo do registro. Preencher com "2".
+3 | 011-034 | 24 | DH | Data e hora da gravação do registro.
+4 | 035-048 | 14 | N | CPF do responsável pela inclusão ou alteração.
+5 | 049-049 | 1 | N | Tipo de identificador do empregador:
+- "1": CNPJ;
+- "2": CPF.  6  050-063  14  N
+CNPJ ou CPF do empregador. | 7 | 064-077 | 14 | N
+CNO (Cadastro Nacional de Obras) ou CAEPF (Cadastro de Atividade Econômica da Pessoa Física), quando existir. | 8 | 078-227 | 150 | A
+Razão social ou nome do empregador. | 9 | 228-327 | 100 | A
+Local de prestação de serviços. | 10 | 328-331 | 4 | A
+CRC-16 do registro. Registro do tipo "3" - Marcação de ponto para REP-C e REP-A
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | NSR.
+2 | 010-010 | 1 | A | Tipo do registro. Preencher com "3".
+3 | 011-034 | 24 | DH | Data e hora da marcação de ponto.
+4 | 035-046 | 12 | N | CPF do empregado.
+5 | 047-050 | 4 | A | CRC-16 do registro.
+Registro do tipo "4" - Ajuste do relógio
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | NSR.
+2 | 010-010 | 1 | N | Tipo do registro. Preencher com "4".
+3 | 011-034 | 24 | DH | Data e hora antes do ajuste.
+4 | 035-058 | 24 | DH | Data e hora ajustada.
+5 | 059-069 | 11 | N | CPF do responsável pela alteração.
+6 | 070-073 | 4 | A | CRC-16 do registro.
+Registro do tipo "5" - Inclusão, alteração ou exclusão de empregado no REP
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | NSR.
+2 | 010-010 | 1 | N | Tipo do registro. Preencher com "5".
+3 | 011-034 | 24 | DH | Data e hora da gravação do registro.
+4 | 035-035 | 1 | A | Tipo de operação:
+- "I": inclusão;
+- "A": alteração;
+- "E": exclusão.  5  036-047  12  N
+CPF do empregado. | 6 | 048-099 | 52 | A
+Nome do empregado. | 7 | 100-103 | 4 | A
+Demais dados de identificação do empregado. | 8 | 104-114 | 11 | N
+CPF do responsável pela alteração. | 9 | 115-118 | 4 | A
+CRC-16 do registro. Registro do tipo "6" - Eventos sensíveis do REP
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | NSR.
+2 | 010-010 | 1 | N | Tipo do registro. Preencher com "6".
+3 | 011-034 | 24 | DH | Data e hora da gravação do registro.
+4 | 035-036 | 2 | N | Tipo de evento: "01": abertura do REP por manutenção ou violação (somente para REP-C); "02": retorno de energia (REP-C ou REP-P); "03": introdução de dispositivo externo de memória na Porta Fiscal (somente para REP-C); "04": retirada de dispositivo externo de memória na Porta Fiscal (somente para REP-C); "05": emissão da Relação Instantânea de Marcações (somente para REP-C); "06": erro de impressão (somente para REP-C); "07": disponibilidade de serviço (somente para REP-P); "08": indisponibilidade de serviço (somente para REP-P).
+Portaria
+Registro do tipo "7" - Marcação de ponto para REP-P
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | NSR.
+2 | 010-010 | 1 | A | Tipo do registro. Preencher com "7".
+3 | 011-034 | 24 | DH | Data e hora da marcação de ponto.
+4 | 035-046 | 12 | N | CPF do empregado.
+5 | 047-070 | 24 | DH | Data e hora de gravação do registro.
+6 | 071-072 | 2 | N | Identificador do coletor da marcação: "01": aplicativomobile; "02":browser(navegador internet); "03": aplicativodesktop; "04": dispositivo eletrônico; "05": outro dispositivo eletrônico não especificado acima.
+7 | 073-073 | 1 | N | Informar "0" para marcaçãoon-lineou "1" para marcaçãooff-line.
+8 | 074-137 | 64 | A | Códigohash.
+Será utilizado o padrão SHA-256 na geração do código hash especificado no campo nº 8, e seu cálculo será feito com base nos dados abaixo:
+1. NSR (campo nº 1);
+2. tipo do registro (campo nº 2);
+3. data e hora da marcação de ponto (campo nº 3);
+4. CPF do empregado (campo nº 4);
+5. data e hora da gravação do registro (campo nº 5);
+6. identificador do coletor da marcação (campo nº 6);
+7. informação se a marcação foi on-line ou off-line (campo nº 7); e
+8. código hash (SHA-256) do registro anterior, caso exista.
+Registro do tipo "9" - Trailer
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-009 | 9 | N | "999999999".
+2 | 010-018 | 9 | N | Quantidade de registros do tipo "2" no arquivo.
+3 | 019-027 | 9 | N | Quantidade de registros do tipo "3" no arquivo.
+4 | 028-036 | 9 | N | Quantidade de registros do tipo "4" no arquivo.
+5 | 037-045 | 9 | N | Quantidade de registros do tipo "5" no arquivo.
+6 | 046-054 | 9 | N | Quantidade de registros do tipo "6" no arquivo.
+7 | 055-063 | 9 | N | Quantidade de registros do tipo "7" no arquivo.
+8 | 064-064 | 1 | N | Tipo do registro. Preencher com "9".
+Assinatura digital
+Referência do campo  Posição  Tamanho  Tipo  Conteúdo
+1 | 001-100 | 100 | A | Assinatura digital.
+ANEXO VI
+ARQUIVO ELETRÔNICO DE JORNADA - AEJ
+O AEJ deve:
+1. Apresentar o formato predeterminado neste anexo.
+3. Apresentar-se no formato texto, codificado no padrão ASCII da norma ISO 8859-1.
+4. Apresentar-se com cada linha correspondente a um registro, terminando com os caracteres 13 e 10, respectivamente, da tabela ASCII da norma ISO 8859-1.
+5. Cada linha do arquivo digital representará um registro e deve conter os campos que estão no leiaute definido para o registro. Ao final de cada campo, com exceção do último campo do registro, deve ser inserido o caractere delimitador "|" (pipe ou barra vertical).
+6. Não conter linhas em branco.
+7. Os tipos dos dados nos campos podem ser:
+N: numérico;
+A: alfanumérico;
+H: hora, no formato "hhmm";
+D: data, no formato "AAAA-MM-dd", onde:
+1. AAAA: ano;
+2. MM: mês;
+3. dd: dia do mês; e
+2. DH: data e hora, no formato "AAAA-MM-ddThh:mm:00ZZZZZ", onde:
+1. AAAA: ano;
+2. MM: mês;
+3. dd: dia do mês;
+4. T: fixo com valor "T";
+5. hh: hora (00 a 23);
+6. mm: minutos (00 a 59);
+7. 00: segundos (fixos com valor "00");
+8. ZZZZZ: fuso horário, onde o primeiro digito representa o sinal (positivo ou negativo) e os outros quatro dígitos representam a hora e os minutos.
+Este arquivo é composto dos seguintes tipos de registro:
+Registro do tipo "01" - Cabeçalho
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "01".
+2 | tpIdtEmpregador | 1 | N | Tipo de identificador do empregador:
+- "1": CNPJ;
+- "2": CPF.  3  idtEmpregador  11 ou 14  N
+CNPJ ou CPF do empregador. | 4 | caepf | 14 | N
+CAEPF (Cadastro de Atividade Econômica da Pessoa Física), caso exista. | 5 | cno | 12 | N
+CNO (Cadastro Nacional de Obras), caso exista. | 6 | razaoOuNome | 1 a 150 | A
+Razão social ou nome do empregador. | 7 | dataInicialAej | 10 | D
+Data inicial dos registros no AEJ. | 8 | dataFinalAej | 10 | D
+Data final dos registros no AEJ. | 9 | dataHoraGerAej | 24 | DH
+Data e hora da geração do AEJ. | 10 | versaoAej | 3 | A
+Versão do leiaute do AEJ. Preencher com "001". Observação: Exemplo para o campo tipo DH (data e hora): 2021-04-27T16:44:00-0300.
+Registro do tipo "02" - REPs utilizados
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "02".
+2 | idRepAej | 1 a 9 | N | Identificador do REP no AEJ
+3 | tpRep | 1 | N | Tipo do REP:
+- "1": REP-C;
+- "2": REP-A;
+- "3": REP-P.  4  nrRep  17  N
+Número de fabricação ou identificador do REP, caso exista algum REP associado à marcação. Campo obrigatório quando o campo fonteMarc for igual a "O". Preencher com: - Número de fabricação, no caso de REP-C; - Número do processo do último acordo ou convenção coletiva depositado, no caso de REP-A (caso não haja, informar "99999999999999999"); - Número de registro no INPI, no caso de REP-P. Registro do tipo "03" - Vínculos
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "03".
+2 | idtVinculoAej | 1 a 9 | N | Identificador do vínculo no AEJ.
+3 | cpf | 11 | N | CPF do empregado.
+4 | nomeEmp | 1 a 150 | A | Nome do empregado.
+Registro do tipo "04" - Horário contratual
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "04".
+2 | codHorContratual | 1 a 30 | A | Código do horário contratual no AEJ.
+3 | durJornada | 1 a 12 | N | Duração da jornada, convertida em minutos.
+4 | hrEntrada01 | 4 | H | Hora da primeira entrada.
+5 | hrSaida01 | 4 | H | Hora da primeira saída.
+6 | hrEntrada02 | 0 ou 4 | H | Hora da segunda entrada.
+7 | hrSaida02 | 0 ou 4 | H | Hora da segunda saída.
+Observações:
+1. O campo codHorContratual identifica o horário contratual dentro do AEJ.
+2. Caso o horário contratual tenha mais de dois pares entrada/saída, esses devem ser informados em sequência. Assim, teremos os campos hrEntradaNN e hrSaidaNN, onde NN representa a ordem do par entrada/saída.
+3. Caso o horário seja noturno, o campo durJornada deve ser informado considerando a redução da hora noturna.
+Registro do tipo "05" - Marcações
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "05".
+2 | idtVinculoAej | 1 a 9 | N | Identificador do vínculo no AEJ (informado no registro do tipo "03").
+3 | dataHoraMarc | 24 | DH | Data e hora da marcação.
+4 | idRepAej | 0 a 9 | N | Identificador do REP no AEJ (informado no registro do tipo "02").
+5 | tpMarc | 1 | A | Tipo da marcação:
+- "E": marcação de entrada;
+- "S": marcação de saída;
+- "D": marcação desconsiderada.  6  seqEntSaida  3  N
+Número sequencial do par entrada/saída. | 7 | fonteMarc | 1 | A
+Fonte da marcação: - "O": marcação original do REP; - "I ": marcação incluída manualmente; - "P": marcação pré-assinalada; - "X": ponto por exceção; - "T ": outras fontes de marcação. | 8 | codHorContratual | 0 a 30 | A
+Código do horário contratual no AEJ (informado no registro do tipo "04"). Campo obrigatório quando a marcação se tratar da primeira entrada, ou seja, tpMarc igual a "E" e seqEntSaida igual a "1". | 9 | motivo | 0 a 150 | A
+Motivo da desconsideração ou inclusão da marcação. Campo obrigatório quando tpMarc for igual a "D" ou fonteMarc for igual a "I". Registro do tipo "06" - Identificação da matrícula do vínculo no eSocial, para empregados com mais de um vínculo no AEJ
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "06".
+2 | idtVinculoAej | 1 a 9 | N | Identificador do vínculo no AEJ (informado no registro do tipo "03").
+3 | matEsocial | 1 a 30 | A | Matrícula do vínculo no eSocial.
+Registro do tipo "07" - Ausências e Banco de Horas
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "07".
+2 | idtVinculoAej | 1 a 9 | N | Identificador do vínculo no AEJ (informado no registro do tipo "03").
+3 | tipoAusenOuComp | 1 | N | Código com tipo da ausência ou compensação: - "1": Descanso Semanal Remunerado (DSR); - "2": falta não justificada; - "3": movimento no banco de horas; - "4": folga compensatória de feriado.
+4 | data | 10 | D | Data da ausência ou compensação.
+5 | qtMinutos | 0 a 12 | N | Quantidade de minutos. Campo obrigatório se tipoAusenOuComp for igual a "3".
+6 | tipoMovBH | 0 ou 1 | N | Tipo de movimento no banco de horas:
+- "1": inclusão de horas no banco de horas;
+- "2": compensação de horas do banco de horas.
+Campo obrigatório se tipoAusenOuComp for igual a "3".  Registro do tipo "08" - Identificação do PTRP (Programa de Tratamento de Registro de Ponto)
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "08".
+2 | nomeProg | 1 a 150 | A | Nome do PTRP.
+3 | versaoProg | 1 a 8 | A | Versão do PTRP.
+4 | tpIdtDesenv | 1 | N | Tipo de identificador do desenvolvedor do PTRP:
+- "1": CNPJ;
+- "2": CPF.  5  idtDesenv  11 ou 14  N
+CNPJ ou CPF do desenvolvedor do PTRP. | 6 | razaoNomeDesenv | 1 a 150 | A
+Razão social ou nome do desenvolvedor do PTRP. | 7 | emailDesenv | 1 a 50 | N
+E-mail do desenvolvedor do PTRP. Registro do tipo "99" - Trailer
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | tipoReg | 2 | N | Tipo do registro. Preencher com "99".
+2 | qtRegistrosTipo01 | 1 a 9 | N | Quantidade de registros do tipo "01".
+3 | qtRegistrosTipo02 | 1 a 9 | N | Quantidade de registros do tipo "02".
+4 | qtRegistrosTipo03 | 1 a 9 | N | Quantidade de registros do tipo "03".
+5 | qtRegistrosTipo04 | 1 a 9 | N | Quantidade de registros do tipo "04".
+6 | qtRegistrosTipo05 | 1 a 9 | N | Quantidade de registros do tipo "05".
+7 | qtRegistrosTipo06 | 1 a 9 | N | Quantidade de registros do tipo "06".
+8 | qtRegistrosTipo07 | 1 a 9 | N | Quantidade de registros do tipo "07".
+9 | qtRegistrosTipo08 | 1 a 9 | N | Quantidade de registros do tipo "08".
+Assinatura digital
+Referência do campo  Nome do campo  Tamanho  Tipo  Conteúdo
+1 | assinDigital | 100 | A | Assinatura digital.
+ANEXO VII
+ATESTADO TÉCNICO E TERMO DE RESPONSABILIDADE
+Na qualidade de responsável técnico e de responsável legal da empresa (razão social ou nome), (CNPJ/CPF nº XXX), os signatários abaixo, em atenção ao art. 18 da Portaria SEPRT/ME nº XXX/2021, atestam e declaram que o equipamento e/ou programa identificados abaixo estão em conformidade com a Portaria SEPRT nº XXX/2021.
+Tipo do REP/PTRP: ("REP-C", "REP-A", "REP-P" ou "PTRP" para Programa de Tratamento)
+Marca Equipamento: (marca do equipamento ou "N/A" caso não se aplique)
+Modelo Equipamento: (modelo do equipamento ou "N/A")
+Certificado de conformidade: (certificado de conformidade do REP-C ou "N/A")
+Número de fabricação: (número de fabricação do REP-C ou "N/A")
+Número de registro no INPI: (número de registro no INPI do REP-P ou "N/A")
+Identificador do Programa: (identificador do programa ou "N/A")
+Versão do Programa: (versão do programa ou "N/A")
+Assinatura Eletrônica: (somente REP-C)
+Chave pública: (chave pública usada para assinatura eletrônica)
+Algoritmo de criptografia assimétrica: (algoritmo utilizado para criptografia assimétrica)
+Algoritmo de hash: (algoritmo de hash utilizado na assinatura eletrônica)
+Declaramos ainda, que estamos cientes das consequências legais, cíveis e criminais, quanto à falsa declaração, falso atestado e falsidade ideológica. Reiteramos ao usuário que este documento deve ficar disponível para pronta apresentação para a Inspeção do Trabalho.
+Empresa/Pessoa Destinatária:
+Razão Social: (Razão social ou nome da empresa destinatária)
+CNPJ/CPF: (CNPJ/CPF da empresa destinatária)
+___________________________________________
+Nome e CPF do Responsável Legal
+___________________________________________
+Nome e CPF do Responsável Técnico
+ANEXO VIII
+REQUISITOS DO REGISTRADOR ELETRÔNICO DE PONTO CONVENCIONAL - REP-C
+O REP-C deve apresentar os seguintes requisitos:
+1. Relógio interno de tempo real (Real Time Clock - RTC) com precisão mínima de 5 (cinco) partes por milhão (ppm) e que permita operações de ajuste, com capacidade de funcionamento ininterrupto por um período mínimo de 1.440 (mil quatrocentos e quarenta) horas na ausência de energia elétrica de alimentação.
+2. Mostrador não-analógico do RTC, contendo hora, minutos e segundos, com as seguintes características:
+1. densidade horizontal máxima deve ser de 2 (dois) caracteres por centímetro; e
+2. o caractere não pode ter altura inferior a 8 (oito) mm.
+3. Dispor de mecanismo impressor em bobina de papel, integrado e de uso exclusivo do equipamento, que permita impressões com durabilidade mínima de 5 (cinco) anos.
+4. Meio de armazenamento permanente, denominado Memória de Registro de Ponto - MRP, com capacidade de retenção dos dados gravados por, no mínimo, 10 (dez) anos, onde os dados armazenados não possam ser apagados ou alterados, direta ou indiretamente. As seguintes operações devem ser gravadas de forma permanente na MRP:
+1. marcação de ponto, armazenando número do CPF, data e hora da marcação;
+2. inclusão ou alteração das informações do empregador, armazenando os dados de data, hora e responsável pela inclusão ou alteração; tipo de identificador do empregador (CNPJ ou CPF); identificação do empregador; CEI/CAEPF/CNO, caso exista; razão social ou nome; e local da prestação do serviço;
+3. ajuste do RTC, armazenando os dados de data antes do ajuste, hora antes do ajuste, data ajustada e hora ajustada, além de identificação do responsável pelo ajuste do RTC;
+4. inserção, alteração e exclusão de dados de empregado, armazenando os dados de data e hora da operação, tipo de operação, número do CPF, nome do empregado e demais dados necessários à identificação do trabalhador pelo REP, além de identificação do responsável pela operação; e
+5. eventos sensíveis do REP, considerando seus respectivos códigos.
+OBS: Cada registro gravado na MRP deve conter Número Sequencial de Registro - NSR consistindo em numeração sequencial em incrementos unitários, iniciando-se em 1 na primeira operação do REP.
+5. Meio de armazenamento, denominado Memória de Trabalho - MT, onde ficarão armazenados os dados necessários à operação do REP. Os seguintes dados devem ser gravados na MT:
+1. do empregador: tipo de identificador do empregador (CNPJ ou CPF); identificador do empregador; CEI/CAEPF/CNO, caso exista; razão social ou nome; e local da prestação do serviço; e
+2. dos empregados que utilizam o REP: nome, CPF e demais dados necessários à identificação do empregado pelo equipamento.
+6. Gerar o Arquivo Fonte de Dados - AFD, a partir dos dados armazenados na MRP, em conformidade com o Anexo I desta Portaria.
+7. Emitir a Relação Instantânea de Marcações - RIM, contendo a relação de todas as marcações efetuadas pelos trabalhadores na últimas 24 (vinte e quatro) horas, disponível no local da prestação do serviço para pronta extração na forma impressa ao Auditor-Fiscal do Trabalho.
+8. A impressão da RIM deve ter prioridade frente à atividade de marcação de ponto, com velocidade mínima de 480 (quatrocentas e oitenta) marcações de ponto em um tempo de 10 (dez) minutos, contendo as seguintes informações:
+1. cabeçalho com identificador (CNPJ/CPF); CEI/CAEPF/CNO, caso exista; razão social ou nome do empregador; local da prestação do serviço; número de fabricação do REP; hora, dia, mês e ano da emissão da RIM;
+2. NSR;
+3. número do CPF e nome do empregado;
+4. horário da marcação de ponto; e
+5. quadrado, de 10 (dez) mm de lado, em cor preta, sólida, impresso ao final da RIM, no centro do papel.
+9. Realizar marcação de ponto, composta dos seguintes passos:
+1. receber diretamente a identificação do trabalhador, sem interposição de outro equipamento;
+2. obter a hora do RTC;
+3. registrar a marcação de ponto na MRP; e
+4. gerar o Comprovante de Registro de Ponto do Trabalhador conforme arts. 8º e 9º.
+10. A impressão do Comprovante de Registro de Ponto do Trabalhador deverá ser feita em cor contrastante com o papel, em caracteres legíveis com a densidade horizontal máxima de oito caracteres por centímetro e o caractere não poderá ter altura inferior a três milímetros.
+11. O registro da marcação de ponto gravada na MRP consistirá dos seguintes campos:
+1. NSR;
+2. CPF do trabalhador;
+3. data da marcação; e
+4. horário de marcação, composta de hora, minutos e fuso horário.
+12. Possuir identificação do REP gravada de forma indelével na sua estrutura externa, contendo CNPJ e nome do fabricante, marca, modelo e número de fabricação do REP, o qual deve ser composto por 17 (dezessete) dígitos (FFFFFMMMMMVSSSSSS), sendo:
+Portaria
+1. FFFFF: número de cadastro do fabricante;
+2. MMMMM: número de registro do modelo;
+3. V: versão da MRP, com até 1 (um) dígito, podendo variar de 0 (zero) a 9 (nove); e
+4. SSSSSS: número série único do equipamento.
+OBS: A marcação indelével do REP assume sempre V igual a 0 (zero). Somente a numeração que é impressa nos documentos fiscais é que terá o dígito V atualizado, conforme forem introduzidas novas versões de MRP.
+13. Dispor de porta de saída padrão USB externa, de uso exclusivo pelo Auditor-Fiscal do Trabalho, compatível com dispositivo USB de armazenamento de massa com conector macho tipo A, formatado no padrão FAT32, denominada Porta Fiscal.
+14. Gravar o AFD em dispositivo externo de memória, por meio da Porta Fiscal, para a pronta captura de todos dados armazenados na MRP pelo Auditor-fiscal do trabalho, com mensagens de evolução do processo de transmissão de informações, bem como mensagem de conclusão ou erro, até que o dispositivo seja extraído do REP.
+15. A gravação do AFD em dispositivo externo de memória, por meio da Porta Fiscal, deve ocorrer em qualquer situação crítica, como equipamento aberto, sem papel ou com MRP esgotada, com prioridade no caso de uso simultâneo de outras portas de saída, quando existirem.
+16. O tempo de gravação da AFD na Porta Fiscal deve respeitar as seguintes condições:
+1. a taxa de transferência real mínima de transmissão dos dados da MRP para o dispositivo externo de memória, por meio da Porta Fiscal, deve ser 219,73 kbit/s;
+2. o tempo máximo de captura da MRP esgotada deve ser 40 (quarenta) minutos; e
+3. a contagem de tempo de captura do AFD deve ser suspendida quando ocorrer marcação de ponto simultaneamente à referida captura.
+17. Demais itens especificados no Regulamento Técnico da Qualidade para Registrador Eletrônico de Ponto publicado pelo INMETRO, em virtude da delegação atribuída pela Portaria MTE nº 101, de 13 de janeiro de 2012.
+ANEXO IX
+REQUISITOS DO REGISTRADOR ELETRÔNICO DE PONTOVIA PROGRAMA - REP-P
+O REP-P deve apresentar os seguintes requisitos:
+1. Permitir a identificação da organização e do trabalhador.
+2. Possuir ou acessar relógio que mantenha sincronismo com a Hora Legal Brasileira (HLB) disseminada pelo Observatório Nacional (ON), com uma variação de no máximo 30 (trinta) segundos.
+3. Todo coletor de marcação de registro de ponto conectado ao REP-P deve exibir relógio não-analógico contendo horas, minutos e segundos no momento da marcação.
+4. As marcações registradas realizadas no REP-P devem ser oriundas de coletor on-line (conectado ao REP-P), podendo excepcionalmente estar off-line (não conectado ao REP-P).
+5. No caso de registro off-line, as marcações devem ser enviadas posteriormente no primeiro momento em que o coletor entrar em modo on-line (conectado ao REP-P), garantidas as normas de segurança da informação contidas nesta Portaria.
+6. Acesso a meio de armazenamento com redundância, alta disponibilidade e confiabilidade, denominado Armazenamento de Registro de Ponto - ARP. As seguintes operações devem ser gravadas na ARP:
+1. inclusão ou alteração das informações do empregador, armazenando os dados de data, hora e responsável pela inclusão ou alteração; tipo de identificador do empregador (CNPJ ou CPF); identificação do empregador; CEI/CAEPF/CNO, caso exista; razão social ou nome; e local da prestação do serviço ou endereço do estabelecimento ao qual o empregado esteja vinculado, quando exercer atividade externa ou em instalações de terceiros;
+2. ajuste do relógio, armazenando os dados de data antes do ajuste, hora antes do ajuste, data ajustada e hora ajustada, além de identificação do responsável pelo ajuste do relógio;
+3. inserção, alteração e exclusão de dados de empregado, armazenando os dados de data e hora da operação, tipo de operação, número do CPF, nome do empregado e demais dados necessários à identificação do trabalhador pelo REP, além de identificação do responsável pela operação;
+4. eventos sensíveis do REP, considerando seus respectivos códigos; e
+5. marcação de ponto, armazenando número do CPF, data e hora da marcação, fuso horário da marcação, data e hora da gravação do registro, fuso horário da gravação do registro, identificador do coletor e código hash (SHA-256).
+OBS: Cada estabelecimento terá sua própria sequência de NSR, consistindo em numeração sequencial em incrementos unitários, iniciando-se em 1 na primeira operação do REP em relação ao estabelecimento.
+7. Os dados armazenados na ARP não devem ser apagados ou alterados, direta ou indiretamente, pelo prazo mínimo legal.
+8. Realizar marcação de ponto, composta dos seguintes passos:
+1. receber de forma inequívoca a identificação do trabalhador, valendo-se de serviços informáticos que garantam a disponibilidade permanente desta funcionalidade;
+2. obter a data e a hora de registro do ponto de forma confiável;
+3. registrar a marcação de ponto na ARP; e
+4. disponibilizar Comprovante de Registro de Ponto do Trabalhador conforme arts. 8º e 9º.
+9. Caso seja adotado o formato impresso para o Comprovante de Registro de Ponto do Trabalhador, a impressão deverá ser feita em cor contrastante com o papel, em caracteres legíveis com a densidade horizontal máxima de oito caracteres por centímetro e o caractere não poderá ter altura inferior a três milímetros.
+10. O registro da marcação de ponto gravada na ARP consistirá dos seguintes campos:
+1. NSR;
+2. CPF do Trabalhador;
+3. data da marcação;
+4. horário de marcação, composto de hora, minutos e fuso horário;
+5. data da gravação do registro;
+6. horário da gravação do registro, composto de hora, minutos e fuso horário;
+7. identificação do coletor; e
+8. código hash (SHA-256).
+11. Gerar o Arquivo Fonte de Dados - AFD, a partir dos dados armazenados na ARP, em conformidade com o Anexo I desta Portaria.
+12. Possibilitar a geração do AFD para um determinado intervalo temporal.
+13. Todos os equipamentos e programas informatizados que integram o REP-P devem apresentar alta disponibilidade, de modo a não comprometer o serviço de registro de ponto em qualquer uma de suas etapas.
+ANEXO X
+MINUTA DE ACORDO DE COOPERAÇÃO TÉCNICA ENTRE MINISTÉRIO DO TRABALHO E PREVIDÊNCIA E ENTES OU ENTIDADES DOS SETORES PÚBLICOS DAS ESFERAS ESTADUAIS, DISTRITAL OU MUNICIPAL OU ÓRGÃOS E ENTIDADES DA ADMINISTRAÇÃO PÚBLICA FEDERAL NÃO CONTEMPLADOS PELO DECRETO Nº 10.046, DE 09 DE OUTUBRO DE 2019
+Acordo de Cooperação Técnica que entre si celebram a UNIÃO, por intermédio do MINISTÉRIO DO TRABALHO E PREVIDÊNCIA e o [NOME DO ÓRGÃO/ENTE/ENTIDADE PÚBLICA], visando o acesso às informações da(o) [IDENTIFICAR BASE DE DADOS POR EXTENSO], disponibilizadas pelo MINISTÉRIO DO TRABALHO E PREVIDÊNCIA.
+A UNIÃO, por intermédio do MINISTÉRIO DO TRABALHO E PREVIDÊNCIA, com sede na Esplanada dos Ministérios, Bloco F, Brasília-DF, CEP: 70059-900, inscrito no CNPJ sob o nº [CNPJ], doravante denominada MTP, neste ato representada pelo [CARGO DA AUTORIDADE COMPETENTE PELA ASSINATURA], [NOME COMPLETO DA AUTORIDADE], no exercício de suas atribuições, e o [NOME DO ÓRGÃO/ENTE/ENTIDADE PÚBLICA], com sede [ENDEREÇO COMPLETO], inscrito no CNPJ sob o nº [CNPJ], doravante denominado(a) [SIGLA], neste ato representado pelo [CARGO], [NOME COMPLETO DO REPRESENTANTE], considerando o disposto na Lei nº 12.527, de 18 de novembro de 2011 (Lei de Acesso à Informação), na Lei nº 13.709, de 14 de agosto de 2018 (Lei Geral de Proteção de Dados) e nos demais dispositivos aplicáveis; considerando o constante no processo nº [PROCESSO DE SOLICITAÇÃO]; e considerando o disposto na Portaria MTP nº XXXX/2021, resolvem celebrar o presente ACORDO DE COOPERAÇÃO TÉCNICA, doravante denominado ACORDO, regido pelas seguintes cláusulas e condições:
+CLÁUSULA PRIMEIRA - DO OBJETO
+I - O presente ACORDO tem por objeto o acesso da [SIGLA] às informações cadastrais nas bases da (o) [IDENTIFICAR BASE DE DADOS], mantidos pelo MTP, com a finalidade, exclusiva, de [OBJETIVO DA UTILIZAÇÃO].
+II - As informações cadastrais incluem os dados pessoais ou sensíveis apontadas no Plano de Trabalho, que, nos termos da Cláusula Quinta, é parte integrante do presente instrumento.
+CLÁUSULA SEGUNDA - DAS ATRIBUIÇÕES E DAS RESPONSABILIDADES DOS PARTÍCIPES
+Os partícipes se comprometem a conjugar esforços para o desenvolvimento e a execução das ações concernentes ao objeto do presente ACORDO, nos seguintes termos:
+I - Incumbe ao [SIGLA] no limite de suas atribuições:
+a) manter o grau de confidencialidade atribuído pelo cedente às informações a que tiver acesso por força deste ACORDO, não repassando a terceiros dados identificados, identificáveis, ainda que anonimizados, nos termos da Lei nº 12.527, de 18 de novembro de 2011, e do Decreto nº 7.845, de 14 de novembro de 2012;
+b) proporcionar grau de proteção das informações adequado e equivalente aos padrões previstos pelo ordenamento jurídico brasileiro, previstos na Lei nº 12.527, de 2011, na Lei nº 13.709, de 14 de agosto de 2018, e nos decorrentes regulamentos, que possam garantir a necessária proteção aos dados pessoais;
+c) adotar providências necessárias para que aqueles que tiverem acesso à(s) base(s) de dados sob sua guarda conheçam as normas e observem os procedimentos de segurança e de tratamento da informação definidos para os sistemas objeto do ACORDO, conforme estabelecido pela Lei nº 12.527, de 2011, e pelo Decreto nº 7.845, de 2012;
+d) assinar e encaminhar ao MTP o Plano de Trabalho e o Termo de Compromisso e Manutenção de Sigilo, conforme, respectivamente, Anexos III e IV da Portaria MTP nº XXXX, para garantir a identificação inequívoca do signatário, conforme estabelece a Lei nº 11.419, de 19 de dezembro de 2006;
+e) exigir, para fins de credenciamento e autorização de acesso às bases de dados abrangidas por este ACORDO, o preenchimento de Termo de Compromisso e Manutenção de Sigilo, conforme o art. 18 do Decreto nº 7.845, de 2012;
+f) usar e permitir o uso das informações cedidas apenas para os fins especificados no presente ACORDO;
+g) manter sigilo das informações pessoais contidas na(s) base(s) de dados supracitada(s), abstendo de revelá-las ou divulgá-las, sob pena de incorrer nas sanções civis e penais decorrentes de eventual uso indevido;
+h) dar ciência aos usuários das bases de dados dos procedimentos para acesso específico, conforme definido pela Portaria MTP nº XXXX de 2021;
+i) comunicar ao MTP qualquer dúvida ou observações que tiver a respeito de imprecisões ou indícios de inconsistências nas informações da base acessada;
+j) comunicar ao MTP a desistência ou óbito que vier a ter ciência dos usuários bases de dados que tenham tido acesso concedido ao objeto deste ACORDO;
+k) fornecer ao MTP cópia, em meio eletrônico, de qualquer produto técnico formulado a partir de informações das bases de dados objeto deste ACORDO, como relatórios, trabalhos, estudos, indicadores, pesquisas, bastando, na hipótese de publicação na rede mundial de computadores, o envio do endereço eletrônico do sítio da publicação; e
+l) manter a guarda do Termo de Compromisso e Manutenção de Sigilo assinado pelos usuários das bases de dados, que poderá ser em meio físico ou eletrônico, desde que garantida a identificação inequívoca do signatário, conforme estabelece a Lei nº 11.419, de 2006.
+II - Incumbe ao MTP no limite de suas atribuições:
+a) prestar as informações necessárias para o adequado cumprimento deste ACORDO;
+b) analisar os requerimentos protocolados pelo usuário de dados vinculados à instituição partícipe e proceder às comunicações;
+c) disponibilizar ao [SIGLA] e seus usuários as bases de dados objeto deste ACORDO, conforme periodicidade e formato definidos em plano de trabalho específico ao usuário;
+d) manter a guarda do processo administrativo e dos Termos de Compromisso e Manutenção de Sigilo, bem como a cópia da publicação do extrato do ACORDO no Diário Oficial da União - DOU, por intermédio de sua área responsável;
+e) publicar no DOU o extrato do ACORDO; e
+f) prestar informações claras quanto à execução deste ACORDO.
+CLÁUSULA TERCEIRA - DOS RECURSOS HUMANOS
+As ações e atividades realizadas em virtude do presente ACORDO não implicarão em cessão de servidores e empregados, tampouco acarretarão alteração de seu vínculo funcional com o órgão ou instituição de origem, que deverá arcar com todos os encargos de natureza funcional, trabalhista, previdenciária, fiscal e securitária dele decorrentes.
+CLÁUSULA QUARTA - DOS RECURSOS FINANCEIROS
+I - O presente ACORDO não envolve transferência de recursos financeiros entre os partícipes, cabendo a cada um o custeio das despesas inerentes à execução das ações e obrigações sob sua competência.
+II - Cada partícipe responsabilizar-se-á pela remuneração de seus respectivos servidores e empregados designados para as ações e atividades previstas neste ACORDO, bem como de quaisquer outros encargos a eles pertinentes.
+CLÁUSULA QUINTA - DO CUMPRIMENTO DO PLANO DE TRABALHO
+Para o alcance do objeto pactuado por meio do presente Termo, MTP e [SIGLA] se obrigam a cumprir, no que for de sua responsabilidade, o Plano de Trabalho, elaborado na forma do art. 116 da Lei nº 8.666, de 21 de junho de 1993, que será parte integrante do presente instrumento.
+CLÁUSULA SEXTA - DA VIGÊNCIA
+Este ACORDO entrará em vigor na data de sua assinatura, pelo prazo [QUANTIDADE DE MESES, LIMITADO A TRINTA E SEIS], podendo ser prorrogado por meio de Termo Aditivo, por igual período, desde que haja interesse dos órgãos partícipes.
+CLÁUSULA SÉTIMA - DA MODIFICAÇÃO
+O presente instrumento poderá, a qualquer tempo, ser modificado, exceto quanto ao seu objeto, mediante Termo Aditivo, desde que tal interesse seja manifestado por um dos partícipes previamente e por escrito, em até sessenta dias antes do término de sua vigência, devendo, em qualquer caso, haver a anuência do outro partícipe da alteração proposta.
+CLÁUSULA OITAVA - DA SUSPENSÃO, DA RESILIÇÃO E DA RESCISÃO
+Este ACORDO poderá ser:
+I - suspenso pelo MTP, quando da suspeita da utilização indevida dos dados protegidos, enquanto o processo administrativo ou judicial de investigação perdurar;
+II - resilido, podendo ocorrer de comum acordo mediante comunicação por escrito, com antecedência mínima de sessenta dias, cabendo a cada um tão somente a execução das atividades relativas ao período anterior à comunicação; e
+III - rescindido:
+a) pelo descumprimento de cláusula pactuada, devendo ser notificada a parte oposta por escrito, no prazo de trinta dias, garantida a ampla defesa; e
+b) em virtude de restar prejudicado seu objeto, por alteração legal ou normativa.
+CLAUSULA NONA - DOS DIREITOS INTELECTUAIS
+A [SIGLA] autoriza o MTP a utilizar, sem ônus, qualquer produto técnico elaborado no âmbito deste ACORDO, tais como relatórios, trabalhos, estudos, indicadores ou pesquisas, nas modalidades previstas no art. 29 da Lei nº 9.610, de 19 de fevereiro de 1998.
+CLÁUSULA DÉCIMA - DA PUBLICAÇÃO
+I - O presente ACORDO será publicado pelo MTP, na forma de extrato, até o quinto dia útil do mês subsequente ao da sua assinatura, no DOU, conforme disposto no parágrafo único do art. 61 da Lei nº 8.666, de 21 de junho de 1993.
+II - Após publicação do extrato no DOU, cópia do presente ACORDO será encaminhada pelo MTP à Autoridade Nacional de Proteção de Dados, nos termos do § 2° do art. 26 da Lei nº 13.709, de 2018.
+CLÁUSULA DÉCIMA PRIMEIRA - DA SOLUÇÃO DE CONTROVÉRSIAS
+Os partícipes se comprometem a submeter eventuais controvérsias decorrentes do presente ACORDO à Câmara de Mediação e Conciliação da Administração Federal da Advocacia-Geral da União, na forma do art. 18 do Decreto nº 10.608, de 25 de janeiro de 2021.
+CLÁUSULA DÉCIMA SEGUNDA - DO FORO
+As questões decorrentes da execução do presente ACORDO e dos instrumentos específicos dele decorrentes, que não possam ser dirimidas administrativamente, serão processadas e julgadas no Foro da Justiça Federal, Seção Judiciária do Distrito Federal, renunciando os partícipes a qualquer outro, por mais privilegiado que seja.
+E, para firmeza e prova de assim haverem, entre si, ajustado e acordado, após ter sido lido juntamente com seu(s) anexo(s), o presente Acordo de Cooperação Técnica é assinado pelos partícipes.

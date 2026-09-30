@@ -1,0 +1,145 @@
+@page "/meu-ponto/solicitacoes"
+@attribute [Authorize(Policy = Politicas.Funcionario)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Ajustes e abonos — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Meu ponto" Titulo="Ajustes e abonos" Descricao="Peça a inclusão de uma marcação esquecida ou envie atestados e justificativas para o RH." />
+
+<div class="grade grade-2">
+    <div class="card card-corpo pilha">
+        <div class="linha"><span class="numero">1</span><h2>Ajuste de ponto</h2></div>
+        <div class="form-grade">
+            <div class="campo c-6"><label>Data</label><input type="date" max="@Hoje.ToString("yyyy-MM-dd")" @bind="_data" /></div>
+            <div class="campo c-6"><label>Horário que faltou</label><input type="time" @bind="_hora" /></div>
+            <div class="campo c-12"><label>Motivo</label><input type="text" maxlength="150" placeholder="Ex.: esqueci de marcar a saída do almoço" @bind="_motivo" /></div>
+        </div>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="PedirAjuste">Enviar ao RH</button>
+    </div>
+    <div class="card card-corpo pilha">
+        <div class="linha"><span class="numero">2</span><h2>Abono de falta</h2></div>
+        <div class="form-grade">
+            <div class="campo c-12">
+                <label>Tipo</label>
+                <select @bind="_tipo">
+                    <option value="@TipoAtestado.AtestadoMedico">Atestado médico</option>
+                    <option value="@TipoAtestado.DeclaracaoComparecimento">Declaração de comparecimento</option>
+                    <option value="@TipoAtestado.Justificativa">Justificativa</option>
+                </select>
+            </div>
+            <div class="campo c-6"><label>De</label><input type="date" @bind="_ini" /></div>
+            <div class="campo c-6"><label>Até</label><input type="date" @bind="_fim" /></div>
+            <div class="campo c-12"><label>Foto ou PDF do documento</label><InputFile OnChange="Selecionar" accept="image/*,application/pdf" /></div>
+            <div class="campo c-12"><label>Observação</label><input type="text" @bind="_obs" /></div>
+        </div>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="EnviarAtestado">Enviar atestado</button>
+    </div>
+</div>
+
+<div class="card mt">
+    <div class="card-cab"><h2>Minhas solicitações</h2></div>
+    <table class="tabela">
+        <thead><tr><th>Enviada</th><th>Pedido</th><th>Situação</th><th>Resposta do RH</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var s in _solicitacoes)
+            {
+                <tr>
+                    <td class="small">@s.CriadaEm.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td>Incluir @s.Data.ToString("dd/MM/yyyy") @s.Horario?.ToString("HH:mm") — @s.Motivo</td>
+                    <td><StatusPedido Status="s.Status" /></td>
+                    <td class="small">@s.RespostaRh</td>
+                    <td class="right">
+                        @if (s.Status == StatusSolicitacao.Pendente)
+                        {
+                            <button class="btn btn-fantasma btn-sm" @onclick="() => Cancelar(s.Id)">Cancelar</button>
+                        }
+                    </td>
+                </tr>
+            }
+            @foreach (var a in _atestados)
+            {
+                <tr>
+                    <td class="small">@a.CriadoEm.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td>@PersonaliPonto.Web.Components.Pages.Atestados.Tipo(a.Tipo) — @a.DataInicio.ToString("dd/MM")@(a.DataFim != a.DataInicio ? $" a {a.DataFim:dd/MM}" : "")</td>
+                    <td><StatusPedido Status="a.Status" /></td>
+                    <td class="small">@a.ParecerRh</td>
+                    <td></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    @if (_solicitacoes.Count + _atestados.Count == 0)
+    {
+        <Vazio Texto="Nenhuma solicitação enviada." Icone="checklist" />
+    }
+</div>
+
+@code {
+    private DateOnly _data = Hoje;
+    private TimeOnly _hora = new(8, 0);
+    private string _motivo = "";
+    private TipoAtestado _tipo = TipoAtestado.AtestadoMedico;
+    private DateOnly _ini = Hoje, _fim = Hoje;
+    private byte[]? _arquivo;
+    private string? _nomeArquivo, _obs;
+    private List<SolicitacaoCorrecao> _solicitacoes = [];
+    private List<Atestado> _atestados = [];
+
+    protected override Task CarregarAsync() => Recarregar();
+
+    private async Task Recarregar()
+    {
+        _solicitacoes = await Db.Solicitacoes.AsNoTracking().Where(s => s.FuncionarioId == FuncionarioId).OrderByDescending(s => s.CriadaEm).Take(50).ToListAsync();
+        _atestados = await Db.Atestados.AsNoTracking().Where(s => s.FuncionarioId == FuncionarioId).OrderByDescending(s => s.CriadoEm).Take(50).ToListAsync();
+    }
+
+    private async Task GarantirUso()
+    {
+        var (pode, msg) = await Svc<TenantUsoPolicy>().PodeUsarAsync(TenantId!.Value, default);
+        if (!pode) throw new RegraNegocioException(msg!);
+    }
+
+    private async Task PedirAjuste()
+    {
+        if (await Executar(async () =>
+        {
+            await GarantirUso();
+            await Svc<SolicitacaoService>().SolicitarAsync(FuncionarioId!.Value, TipoSolicitacao.Inclusao, _data, _hora, null, _motivo, default);
+        }, "Solicitação enviada ao RH."))
+        {
+            _motivo = "";
+            await Recarregar();
+        }
+    }
+
+    private async Task Selecionar(InputFileChangeEventArgs e)
+    {
+        if (e.File.Size > ArquivoService.TamanhoMaximo) { Avisos.Erro("Arquivo acima de 10 MB."); return; }
+        using var ms = new MemoryStream();
+        await e.File.OpenReadStream(ArquivoService.TamanhoMaximo).CopyToAsync(ms);
+        _arquivo = ms.ToArray();
+        _nomeArquivo = e.File.Name;
+    }
+
+    private async Task EnviarAtestado()
+    {
+        if (await Executar(async () =>
+        {
+            await GarantirUso();
+            await Svc<AtestadoService>().EnviarAsync(FuncionarioId!.Value, _tipo, _ini, _fim, null, _obs, _nomeArquivo, _arquivo, default);
+        }, "Atestado enviado ao RH."))
+        {
+            _arquivo = null;
+            _obs = null;
+            await Recarregar();
+        }
+    }
+
+    private async Task Cancelar(Guid id)
+    {
+        if (await Executar(() => Svc<SolicitacaoService>().CancelarAsync(id, FuncionarioId!.Value, default), "Solicitação cancelada.")) await Recarregar();
+    }
+}

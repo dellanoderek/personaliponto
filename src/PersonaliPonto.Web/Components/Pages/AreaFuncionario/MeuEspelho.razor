@@ -1,0 +1,106 @@
+@page "/meu-ponto/espelho"
+@attribute [Authorize(Policy = Politicas.Funcionario)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Meu espelho — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Meu ponto" Titulo="Espelho de ponto" Descricao="Suas marcações, horas e ocorrências do período. Ao final do mês, confirme a ciência do espelho.">
+    <Acoes>
+        <div class="campo"><input type="month" value="@_inicio.ToString("yyyy-MM")" @onchange="Mes" /></div>
+        <a class="btn btn-secundario" href="@($"/download/espelho?inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}")" target="_blank"><Icone Nome="download" />PDF</a>
+    </Acoes>
+</Cabecalho>
+
+@if (_espelho is not null)
+{
+    <div class="grade grade-4">
+        <Kpi Rotulo="Trabalhado" Valor="@Formato.Hhmm(_espelho.TotalTrabalhado)" />
+        <Kpi Rotulo="Extras" Valor="@Formato.Hhmm(_espelho.TotalExtras)" />
+        <Kpi Rotulo="Faltas" Valor="@Formato.Hhmm(_espelho.TotalFaltas)" Estado="@(_espelho.TotalFaltas > 0 ? "alerta" : null)" />
+        <Kpi Rotulo="Banco de horas" Valor="@Formato.Hhmm(_espelho.SaldoBancoHoras)" />
+    </div>
+
+    @if (_mesEncerrado)
+    {
+        <div class="card mt card-corpo">
+            @if (_assinado is not null)
+            {
+                <div class="alerta @(_assinado.Concorda ? "sucesso" : "aviso")"><Icone Nome="check" /><div>Espelho @(_assinado.Concorda ? "assinado" : "assinado com ressalva") em @_assinado.AssinadoEm.ToLocalTime().ToString("dd/MM/yyyy HH:mm").@(_assinado.Observacao is null ? "" : $" Observação: {_assinado.Observacao}")</div></div>
+            }
+            else
+            {
+                <h3>Assinatura do espelho de @_inicio.ToString("MM/yyyy")</h3>
+                <p class="small">Confira os dias abaixo. Se discordar de algo, descreva a divergência — o RH será avisado.</p>
+                <div class="linha">
+                    <input type="text" placeholder="Observação (obrigatória se discordar)" style="max-width:420px" @bind="_obs" />
+                    <button class="btn btn-sucesso" disabled="@Ocupado" @onclick="() => Assinar(true)">Concordo e assino</button>
+                    <button class="btn btn-perigo" disabled="@Ocupado" @onclick="() => Assinar(false)">Assinar com ressalva</button>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="grade grade-3 mt">
+        @foreach (var d in _espelho.Dias.OrderByDescending(x => x.Data))
+        {
+            <div class="card card-corpo" style="padding:14px 16px">
+                <div class="linha entre">
+                    <div class="linha" style="gap:12px">
+                        <div class="center" style="line-height:1.1"><div class="small muted">@d.Data.Year</div><div style="font-size:24px;font-weight:700;color:var(--titulo)">@d.Data.Day.ToString("00")</div><div class="small">@d.Data.ToString("MMM", new System.Globalization.CultureInfo("pt-BR"))</div></div>
+                        <div>
+                            <div style="font-weight:700;color:var(--titulo);text-transform:capitalize">@d.Data.ToString("dddd", new System.Globalization.CultureInfo("pt-BR"))</div>
+                            <div class="linha" style="gap:4px;margin-top:4px">
+                                @foreach (var m in d.Marcacoes)
+                                {
+                                    <span class="chip @(m.Desconsiderada ? "desc" : m.Fonte == "Incluída" ? "incl" : "")">@m.DataHora.ToString("HH:mm")</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grade grade-3 mt center small" style="gap:4px">
+                    <div>Falta<div style="color:var(--vermelho);font-weight:700">@Formato.Hhmm(d.MinutosFalta)</div></div>
+                    <div>Extra<div style="color:var(--verde);font-weight:700">@Formato.Hhmm(d.MinutosExtras)</div></div>
+                    <div>Trab.<div style="color:var(--azul);font-weight:700">@Formato.Hhmm(d.MinutosTrabalhados)</div></div>
+                </div>
+                @if (d.Ocorrencia is not null)
+                {
+                    <div class="small muted mt">@d.Ocorrencia</div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private DateOnly _inicio = InicioMes(Hoje);
+    private DateOnly _fim = Hoje;
+    private EspelhoDto? _espelho;
+    private PersonaliPonto.Modules.RH.Domain.AssinaturaEspelho? _assinado;
+    private bool _mesEncerrado;
+    private string? _obs;
+
+    protected override Task CarregarAsync() => Carregar();
+
+    private async Task Mes(ChangeEventArgs e)
+    {
+        if (!DateOnly.TryParse(e.Value + "-01", out var d)) return;
+        _inicio = d;
+        var fim = d.AddMonths(1).AddDays(-1);
+        _fim = fim > Hoje ? Hoje : fim;
+        await Carregar();
+    }
+
+    private Task Carregar() => Executar(async () =>
+    {
+        _espelho = await Svc<EspelhoService>().GerarAsync(FuncionarioId!.Value, _inicio, _fim, default);
+        _mesEncerrado = _inicio.AddMonths(1) <= Hoje;
+        _assinado = _mesEncerrado ? await Svc<AssinaturaEspelhoService>().ObterAsync(FuncionarioId!.Value, _inicio.Year, _inicio.Month, default) : null;
+    });
+
+    private Task Assinar(bool concorda) => Executar(async () =>
+    {
+        _assinado = await Svc<AssinaturaEspelhoService>().AssinarAsync(FuncionarioId!.Value, _inicio.Year, _inicio.Month, concorda, _obs, default);
+    }, "Espelho assinado.");
+}

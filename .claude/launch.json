@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/PersonaliPonto.Web", "--launch-profile", "http"],
+      "port": 5116
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/PersonaliPonto.Api", "--launch-profile", "http"],
+      "port": 5174
+    }
+  ]
+}

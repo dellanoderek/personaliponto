@@ -1,0 +1,42 @@
+@page "/plataforma/acessos"
+@attribute [Authorize(Policy = Politicas.Plataforma)]
+@inherits PaginaPlataforma
+@using PersonaliPonto.Modules.SaaS.Domain
+
+<PageTitle>Acessos de suporte — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Super Admin" Titulo="Acessos de suporte" Descricao="Todo acesso da equipe da plataforma aos dados de um cliente é registrado com motivo, horário e IP." />
+
+<div class="card">
+    <table class="tabela">
+        <thead><tr><th>Início</th><th>Fim</th><th>Usuário</th><th>Cliente</th><th>Motivo</th><th>IP</th></tr></thead>
+        <tbody>
+            @foreach (var a in _lista)
+            {
+                <tr>
+                    <td class="small nowrap">@a.Inicio.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                    <td class="small nowrap">@(a.Fim?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "em aberto")</td>
+                    <td>@a.UsuarioNome</td>
+                    <td style="font-weight:600">@_clientes.GetValueOrDefault(a.TenantId)</td>
+                    <td>@a.Motivo</td>
+                    <td class="small">@a.Ip</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    @if (_lista.Count == 0)
+    {
+        <Vazio Texto="Nenhum acesso de suporte registrado." Icone="escudo" />
+    }
+</div>
+
+@code {
+    private List<AcessoSuporte> _lista = [];
+    private Dictionary<Guid, string> _clientes = [];
+
+    protected override async Task CarregarAsync()
+    {
+        _lista = await Db.AcessosSuporte.AsNoTracking().OrderByDescending(a => a.Inicio).Take(500).ToListAsync();
+        _clientes = await Db.Tenants.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Nome);
+    }
+}

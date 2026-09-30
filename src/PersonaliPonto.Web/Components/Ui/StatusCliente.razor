@@ -1,0 +1,12 @@
+@switch (Status)
+{
+    case TenantStatus.Ativo: <span class="badge b-verde">ativo</span> break;
+    case TenantStatus.Teste: <span class="badge b-azul">em teste</span> break;
+    case TenantStatus.Inadimplente: <span class="badge b-amarelo">inadimplente</span> break;
+    case TenantStatus.Suspenso: <span class="badge b-vermelho">suspenso</span> break;
+    default: <span class="badge b-cinza">cancelado</span> break;
+}
+
+@code {
+    [Parameter] public TenantStatus Status { get; set; }
+}

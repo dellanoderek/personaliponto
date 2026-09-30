@@ -1,0 +1,65 @@
+@page "/minha-conta"
+@attribute [Authorize]
+@inherits PaginaBase
+@using PersonaliPonto.Infrastructure.Seguranca
+
+<PageTitle>Minha conta — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Conta" Titulo="Minha conta" Descricao="Senha e verificação em duas etapas (MFA)." />
+
+<div class="grade grade-2">
+    <div class="card card-corpo pilha">
+        <h2>Senha</h2>
+        <p class="small">Troque sua senha periodicamente. Ao trocar, todas as sessões do aplicativo são encerradas.</p>
+        <a class="btn btn-secundario" href="/trocar-senha" data-enhance-nav="false">Trocar senha</a>
+    </div>
+    <div class="card card-corpo pilha">
+        <h2>Verificação em duas etapas</h2>
+        @if (_mfaAtivo)
+        {
+            <div class="alerta sucesso"><Icone Nome="escudo" /><div>MFA ativo. O código do autenticador será pedido a cada login.</div></div>
+        }
+        else if (_segredo is null)
+        {
+            <p class="small">Recomendado para administradores e RH. Use Google Authenticator, Microsoft Authenticator ou similar.</p>
+            <button class="btn btn-primario" disabled="@Ocupado" @onclick="Iniciar">Configurar MFA</button>
+        }
+        else
+        {
+            <p class="small">No aplicativo autenticador, adicione uma conta manualmente com a chave abaixo (tipo: baseada em tempo):</p>
+            <div class="card suave card-corpo mono" style="font-size:15px;text-align:center;letter-spacing:.1em">@Agrupar(_segredo)</div>
+            <div class="linha">
+                <input type="text" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" style="max-width:180px" @bind="_codigo" />
+                <button class="btn btn-primario" disabled="@Ocupado" @onclick="Confirmar">Confirmar</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool _mfaAtivo;
+    private string? _segredo;
+    private string _codigo = "";
+
+    protected override async Task CarregarAsync()
+    {
+        var id = Usuario.UsuarioId();
+        using (Svc<PersonaliPonto.Infrastructure.Tenancy.RequestContext>().ComoSistema())
+            _mfaAtivo = await Db.Usuarios.AsNoTracking().Where(u => u.Id == id).Select(u => u.MfaHabilitado).FirstOrDefaultAsync();
+    }
+
+    private static string Agrupar(string s) => string.Join(' ', Enumerable.Range(0, (s.Length + 3) / 4).Select(i => s.Substring(i * 4, Math.Min(4, s.Length - i * 4))));
+
+    private Task Iniciar() => Executar(async () =>
+    {
+        var uri = await Svc<AuthService>().IniciarMfaAsync(Usuario.UsuarioId()!.Value, default);
+        _segredo = System.Web.HttpUtility.ParseQueryString(new Uri(uri).Query)["secret"];
+    });
+
+    private Task Confirmar() => Executar(async () =>
+    {
+        await Svc<AuthService>().ConfirmarMfaAsync(Usuario.UsuarioId()!.Value, _codigo, default);
+        _mfaAtivo = true;
+        _segredo = null;
+    }, "Verificação em duas etapas ativada.");
+}

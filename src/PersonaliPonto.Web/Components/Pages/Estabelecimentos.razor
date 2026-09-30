@@ -1,0 +1,203 @@
+@page "/estabelecimentos"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+
+<PageTitle>Empresa e locais — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Cadastros" Titulo="Empresa e locais" Descricao="Identificação do empregador e dos estabelecimentos. Cada estabelecimento tem sua própria sequência de NSR; alterações de identificação geram o registro tipo 2 do AFD.">
+    <Acoes><button class="btn btn-primario" @onclick="NovoEst"><Icone Nome="mais" />Novo estabelecimento</button></Acoes>
+</Cabecalho>
+
+<div class="grade grade-3">
+    <div class="card">
+        <div class="card-cab"><h2>Empresas (empregadores)</h2><button class="btn btn-secundario btn-sm" @onclick="NovoEmp"><Icone Nome="mais" /></button></div>
+        <div class="card-corpo pilha" style="gap:10px">
+            @foreach (var e in _empregadores)
+            {
+                <div class="card suave card-corpo" style="padding:14px">
+                    <div class="linha entre">
+                        <div><div style="font-weight:700;color:var(--titulo)">@e.RazaoSocial</div><div class="small">@(e.TipoIdentificador == TipoIdentificador.Cnpj ? Documentos.FormatarCnpj(e.Identificador) : Documentos.FormatarCpf(e.Identificador))</div></div>
+                        <button class="btn btn-fantasma btn-sm" @onclick="() => EditarEmp(e)"><Icone Nome="editar" /></button>
+                    </div>
+                </div>
+            }
+            @if (_empregadores.Count == 0)
+            {
+                <Vazio Texto="Cadastre a empresa." Icone="predio" />
+            }
+        </div>
+    </div>
+    <div class="card span-2">
+        <div class="card-cab"><h2>Estabelecimentos</h2><span class="small muted">@_estabelecimentos.Count locais</span></div>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Local</th><th>CNPJ/CPF</th><th>Fuso</th><th>Cerca virtual</th><th>Último NSR</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var e in _estabelecimentos)
+                    {
+                        <tr>
+                            <td><div style="font-weight:600">@e.Nome</div><div class="small muted">@e.LocalPrestacao</div></td>
+                            <td class="nowrap">@(e.TipoIdentificador == TipoIdentificador.Cnpj ? Documentos.FormatarCnpj(e.Identificador) : Documentos.FormatarCpf(e.Identificador))</td>
+                            <td class="small">@e.FusoHorario</td>
+                            <td>
+                                @switch (e.ModoCerca)
+                                {
+                                    case ModoCerca.Desativada: <span class="badge b-cinza">desativada</span> break;
+                                    case ModoCerca.Sinalizar: <span class="badge b-azul">sinaliza · @e.RaioCercaMetros m</span> break;
+                                    default: <span class="badge b-vermelho">bloqueia · @e.RaioCercaMetros m</span> break;
+                                }
+                            </td>
+                            <td class="mono">@(_nsr.GetValueOrDefault(e.Id).ToString("000000000"))</td>
+                            <td class="right"><button class="btn btn-secundario btn-sm" @onclick="() => EditarEst(e)"><Icone Nome="editar" />Editar</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<Modal @bind-Aberto="_modalEmp" Titulo="Empresa">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-12"><label>Razão social ou nome do empregador</label><input type="text" maxlength="150" @bind="_emp.RazaoSocial" /></div>
+            <div class="campo c-6"><label>Nome fantasia</label><input type="text" @bind="_emp.NomeFantasia" /></div>
+            <div class="campo c-2">
+                <label>Tipo</label>
+                <select @bind="_emp.TipoIdentificador"><option value="@TipoIdentificador.Cnpj">CNPJ</option><option value="@TipoIdentificador.Cpf">CPF</option></select>
+            </div>
+            <div class="campo c-4"><label>CNPJ/CPF</label><input type="text" @bind="_emp.Identificador" /><span class="ajuda">Aceita CNPJ alfanumérico.</span></div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalEmp = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="SalvarEmp">Salvar</button>
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modalEst" Titulo="Estabelecimento" Grande="true">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-6"><label>Nome do local</label><input type="text" @bind="_est.Nome" placeholder="Ex.: Matriz, Loja Centro" /></div>
+            <div class="campo c-6">
+                <label>Empresa</label>
+                <select @bind="_est.EmpregadorId">
+                    @foreach (var e in _empregadores)
+                    {
+                        <option value="@e.Id">@e.RazaoSocial</option>
+                    }
+                </select>
+            </div>
+            <div class="campo c-2">
+                <label>Tipo</label>
+                <select @bind="_est.TipoIdentificador"><option value="@TipoIdentificador.Cnpj">CNPJ</option><option value="@TipoIdentificador.Cpf">CPF</option></select>
+            </div>
+            <div class="campo c-4"><label>CNPJ/CPF do estabelecimento</label><input type="text" @bind="_est.Identificador" /></div>
+            <div class="campo c-3"><label>CNO/CAEPF (opcional)</label><input type="text" @bind="_est.CnoCaepf" /></div>
+            <div class="campo c-3">
+                <label>Fuso horário</label>
+                <select @bind="_est.FusoHorario">
+                    @foreach (var f in Fusos)
+                    {
+                        <option value="@f.Id">@f.Nome</option>
+                    }
+                </select>
+            </div>
+            <div class="campo c-12"><label>Local de prestação de serviços</label><input type="text" maxlength="100" @bind="_est.LocalPrestacao" /><span class="ajuda">Endereço impresso no comprovante e no AFD (até 100 caracteres).</span></div>
+            <div class="c-12"><h3 class="mt">Cerca virtual (geolocalização)</h3></div>
+            <div class="campo c-3"><label>Latitude</label><input type="number" step="0.000001" @bind="_est.Latitude" /></div>
+            <div class="campo c-3"><label>Longitude</label><input type="number" step="0.000001" @bind="_est.Longitude" /></div>
+            <div class="campo c-2"><label>Raio (m)</label><input type="number" min="30" max="5000" @bind="_est.RaioCercaMetros" /></div>
+            <div class="campo c-4">
+                <label>Comportamento</label>
+                <select @bind="_est.ModoCerca">
+                    <option value="@ModoCerca.Desativada">Desativada</option>
+                    <option value="@ModoCerca.Sinalizar">Registrar e sinalizar ao RH</option>
+                    <option value="@ModoCerca.Bloquear">Bloquear fora da cerca</option>
+                </select>
+            </div>
+            <div class="c-12"><button class="btn btn-secundario btn-sm" @onclick="UsarMinhaLocalizacao"><Icone Nome="mapa" />Usar minha localização atual</button></div>
+            <div class="c-12 linha"><label class="checkbox"><input type="checkbox" @bind="_est.Ativo" /> Ativo</label></div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalEst = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="SalvarEst">Salvar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+    private List<Empregador> _empregadores = [];
+    private List<Estabelecimento> _estabelecimentos = [];
+    private Dictionary<Guid, long> _nsr = [];
+    private Empregador _emp = new();
+    private Estabelecimento _est = new();
+    private bool _modalEmp, _modalEst;
+
+    private static readonly (string Id, string Nome)[] Fusos =
+    [
+        ("America/Sao_Paulo", "Brasília (UTC-3)"), ("America/Fortaleza", "Fortaleza/Recife (UTC-3)"), ("America/Bahia", "Bahia (UTC-3)"),
+        ("America/Belem", "Belém (UTC-3)"), ("America/Manaus", "Manaus (UTC-4)"), ("America/Cuiaba", "Cuiabá (UTC-4)"),
+        ("America/Porto_Velho", "Porto Velho (UTC-4)"), ("America/Boa_Vista", "Boa Vista (UTC-4)"), ("America/Rio_Branco", "Rio Branco (UTC-5)"),
+        ("America/Noronha", "Fernando de Noronha (UTC-2)")
+    ];
+
+    private sealed record Contador(Guid EstabelecimentoId, long UltimoNsr);
+
+    protected override Task CarregarAsync() => Recarregar();
+
+    private async Task Recarregar()
+    {
+        _empregadores = await Db.Empregadores.AsNoTracking().OrderBy(e => e.RazaoSocial).ToListAsync();
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().OrderBy(e => e.Nome).ToListAsync();
+        _nsr = await Db.NsrContadores.AsNoTracking().ToDictionaryAsync(c => c.EstabelecimentoId, c => c.UltimoNsr);
+    }
+
+    private void NovoEmp() { _emp = new Empregador { TipoIdentificador = TipoIdentificador.Cnpj, Ativo = true }; _modalEmp = true; }
+    private void EditarEmp(Empregador e) { _emp = new Empregador { Id = e.Id, TenantId = e.TenantId, RazaoSocial = e.RazaoSocial, NomeFantasia = e.NomeFantasia, TipoIdentificador = e.TipoIdentificador, Identificador = e.Identificador, Ativo = e.Ativo }; _modalEmp = true; }
+
+    private void NovoEst()
+    {
+        if (_empregadores.Count == 0) { NovoEmp(); Avisos.Info("Cadastre a empresa antes do estabelecimento."); return; }
+        _est = new Estabelecimento { EmpregadorId = _empregadores[0].Id, Ativo = true, FusoHorario = "America/Sao_Paulo", RaioCercaMetros = 200 };
+        _modalEst = true;
+    }
+
+    private void EditarEst(Estabelecimento e)
+    {
+        _est = new Estabelecimento
+        {
+            Id = e.Id, TenantId = e.TenantId, EmpregadorId = e.EmpregadorId, Nome = e.Nome, TipoIdentificador = e.TipoIdentificador, Identificador = e.Identificador,
+            CnoCaepf = e.CnoCaepf, LocalPrestacao = e.LocalPrestacao, FusoHorario = e.FusoHorario, Latitude = e.Latitude, Longitude = e.Longitude,
+            RaioCercaMetros = e.RaioCercaMetros, ModoCerca = e.ModoCerca, Ativo = e.Ativo
+        };
+        _modalEst = true;
+    }
+
+    private Task SalvarEmp() => Executar(async () =>
+    {
+        await Svc<CadastroService>().SalvarEmpregadorAsync(_emp, default);
+        _modalEmp = false;
+        await Recarregar();
+    }, "Empresa salva.");
+
+    private Task SalvarEst() => Executar(async () =>
+    {
+        if (_est.ModoCerca != ModoCerca.Desativada && (_est.Latitude is null || _est.Longitude is null || _est.RaioCercaMetros is null))
+            throw new RegraNegocioException("Informe latitude, longitude e raio para ativar a cerca virtual.");
+        await Svc<CadastroService>().SalvarEstabelecimentoAsync(_est, default);
+        _modalEst = false;
+        await Recarregar();
+    }, "Estabelecimento salvo.");
+
+    private sealed record Posicao(double Latitude, double Longitude, double Precisao);
+
+    private async Task UsarMinhaLocalizacao()
+    {
+        var p = await Js.InvokeAsync<Posicao?>("personaliPonto.localizacao");
+        if (p is null) { Avisos.Erro("Não foi possível obter a localização do navegador."); return; }
+        _est.Latitude = Math.Round(p.Latitude, 6);
+        _est.Longitude = Math.Round(p.Longitude, 6);
+    }
+}

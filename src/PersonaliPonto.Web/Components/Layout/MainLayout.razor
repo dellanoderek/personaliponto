@@ -1,0 +1,121 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+
+<AuthorizeView>
+    <Authorized>
+        @{
+            var u = context.User;
+            var plataforma = (u.IsInRole(Roles.SuperAdmin) || u.IsInRole(Roles.Suporte)) && !u.HasClaim(c => c.Type == "suporte_acesso");
+            var empresa = u.IsInRole(Roles.AdminEmpresa) || u.IsInRole(Roles.RH) || u.IsInRole(Roles.Gestor);
+            var rh = u.IsInRole(Roles.AdminEmpresa) || u.IsInRole(Roles.RH);
+            var suporte = u.FindFirst("suporte_cliente")?.Value;
+        }
+        <div class="shell">
+            <aside class="sidebar @(_menuAberto ? "aberta" : "")" @onclick="() => _menuAberto = false">
+                <a class="marca" href="@(plataforma ? "/plataforma" : empresa ? "/" : "/meu-ponto")"><img src="img/logo.png" alt="PersonaliPonto" /></a>
+                <nav>
+                    @if (plataforma)
+                    {
+                        <div class="secao">Plataforma</div>
+                        <NavLink href="/plataforma" Match="NavLinkMatch.All"><Icone Nome="painel" />Visão geral</NavLink>
+                        <NavLink href="/plataforma/clientes"><Icone Nome="predio" />Clientes</NavLink>
+                        <NavLink href="/plataforma/faturamento"><Icone Nome="dinheiro" />Faturamento</NavLink>
+                        <NavLink href="/plataforma/importar"><Icone Nome="upload" />Importar planilha</NavLink>
+                        <NavLink href="/plataforma/planos"><Icone Nome="cartao" />Planos</NavLink>
+                        <NavLink href="/plataforma/acessos"><Icone Nome="escudo" />Acessos de suporte</NavLink>
+                    }
+                    @if (empresa)
+                    {
+                        <div class="secao">Operação</div>
+                        <NavLink href="/" Match="NavLinkMatch.All"><Icone Nome="painel" />Painel</NavLink>
+                        <NavLink href="/marcacoes"><Icone Nome="relogio" />Marcações</NavLink>
+                        <NavLink href="/espelho"><Icone Nome="espelho" />Espelho de ponto</NavLink>
+                        <NavLink href="/solicitacoes"><Icone Nome="checklist" />Solicitações</NavLink>
+                        <NavLink href="/atestados"><Icone Nome="atestado" />Atestados</NavLink>
+                        <NavLink href="/banco-horas"><Icone Nome="banco" />Banco de horas</NavLink>
+                        @if (rh)
+                        {
+                            <NavLink href="/fechamento"><Icone Nome="cadeado" />Fechamento</NavLink>
+                        }
+                        <div class="secao">Cadastros</div>
+                        <NavLink href="/funcionarios"><Icone Nome="pessoas" />Funcionários</NavLink>
+                        @if (rh)
+                        {
+                            <NavLink href="/jornadas"><Icone Nome="calendario" />Jornadas e escalas</NavLink>
+                            <NavLink href="/estabelecimentos"><Icone Nome="predio" />Empresa e locais</NavLink>
+                            <NavLink href="/feriados"><Icone Nome="feriado" />Feriados</NavLink>
+                        }
+                        <div class="secao">Conformidade</div>
+                        <NavLink href="/relatorios"><Icone Nome="relatorio" />Relatórios</NavLink>
+                        @if (rh)
+                        {
+                            <NavLink href="/arquivos-fiscais"><Icone Nome="arquivo" />AFD e AEJ</NavLink>
+                            <NavLink href="/seguranca"><Icone Nome="alerta" />Segurança e antifraude</NavLink>
+                            <NavLink href="/auditoria"><Icone Nome="escudo" />Auditoria</NavLink>
+                            <div class="secao">Configurações</div>
+                            <NavLink href="/terminais"><Icone Nome="terminal" />Terminais de ponto</NavLink>
+                            <NavLink href="/usuarios"><Icone Nome="usuario" />Usuários</NavLink>
+                        }
+                        @if (u.IsInRole(Roles.AdminEmpresa))
+                        {
+                            <NavLink href="/minha-assinatura"><Icone Nome="cartao" />Minha assinatura</NavLink>
+                        }
+                    }
+                    @if (u.HasClaim(c => c.Type == PersonaliPontoClaims.FuncionarioId))
+                    {
+                        <div class="secao">Meu ponto</div>
+                        <NavLink href="/meu-ponto" Match="NavLinkMatch.All"><Icone Nome="relogio" />Registrar ponto</NavLink>
+                        <NavLink href="/meu-ponto/espelho"><Icone Nome="espelho" />Meu espelho</NavLink>
+                        <NavLink href="/meu-ponto/solicitacoes"><Icone Nome="checklist" />Ajustes e abonos</NavLink>
+                    }
+                </nav>
+                <div class="rodape">
+                    PERSONALIPONTO<br />Plataforma Inteligente de Gestão de Jornada
+                </div>
+            </aside>
+
+            <div class="conteudo">
+                @if (suporte is not null)
+                {
+                    <div class="alerta aviso" style="border-radius:0">
+                        <Icone Nome="escudo" />
+                        <div style="flex:1">Modo suporte: você está acessando os dados de <b>@suporte</b>. Todas as ações são auditadas.</div>
+                        <form method="post" action="/plataforma/suporte/sair" data-enhance="false">
+                            <AntiforgeryToken />
+                            <button class="btn btn-sm btn-secundario" type="submit">Encerrar acesso</button>
+                        </form>
+                    </div>
+                }
+                <header class="topo">
+                    <div class="linha">
+                        <button class="btn btn-fantasma btn-sm menu-mobile" aria-label="Abrir menu" @onclick="() => _menuAberto = !_menuAberto" @onclick:stopPropagation="true"><Icone Nome="menu" /></button>
+                        <span class="contexto">@(plataforma ? "Administração da plataforma" : "Gestão de jornada")</span>
+                    </div>
+                    <div class="usuario">
+                        <div class="right" style="line-height:1.2">
+                            <div style="color:var(--titulo);font-weight:600">@u.Identity?.Name</div>
+                            <div class="small muted">@Formato.Papel(u.FindAll(System.Security.Claims.ClaimTypes.Role).LastOrDefault()?.Value)</div>
+                        </div>
+                        <div class="avatar">@Formato.Iniciais(u.Identity?.Name)</div>
+                        <a class="btn btn-fantasma btn-sm" href="/minha-conta" title="Minha conta"><Icone Nome="chave" /></a>
+                        <form method="post" action="/conta/sair" data-enhance="false">
+                            <AntiforgeryToken />
+                            <button class="btn btn-fantasma btn-sm" type="submit" title="Sair"><Icone Nome="sair" /></button>
+                        </form>
+                    </div>
+                </header>
+                <main class="pagina">
+                    @Body
+                </main>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        @Body
+    </NotAuthorized>
+</AuthorizeView>
+<Toasts />
+
+@code {
+    private bool _menuAberto;
+}

@@ -1,0 +1,112 @@
+@page "/solicitacoes"
+@attribute [Authorize(Policy = Politicas.Empresa)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Solicitações — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Operação" Titulo="Solicitações de ajuste" Descricao="Pedidos dos funcionários para incluir marcações esquecidas ou desconsiderar marcações indevidas. A aprovação gera um tratamento auditado; o registro original é preservado." />
+
+<div class="abas">
+    <button class="@(_status == StatusSolicitacao.Pendente ? "ativa" : "")" @onclick="() => Filtrar(StatusSolicitacao.Pendente)">Pendentes (@_pendentes)</button>
+    <button class="@(_status == StatusSolicitacao.Aprovada ? "ativa" : "")" @onclick="() => Filtrar(StatusSolicitacao.Aprovada)">Aprovadas</button>
+    <button class="@(_status == StatusSolicitacao.Recusada ? "ativa" : "")" @onclick="() => Filtrar(StatusSolicitacao.Recusada)">Recusadas</button>
+    <button class="@(_status == StatusSolicitacao.Cancelada ? "ativa" : "")" @onclick="() => Filtrar(StatusSolicitacao.Cancelada)">Canceladas</button>
+</div>
+
+<div class="card">
+    @if (_lista.Count == 0)
+    {
+        <Vazio Texto="Nenhuma solicitação nesta situação." Icone="checklist" />
+    }
+    else
+    {
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Funcionário</th><th>Pedido</th><th>Data</th><th>Horário</th><th>Motivo</th><th>Enviada</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var s in _lista)
+                    {
+                        <tr>
+                            <td style="font-weight:600">@_nomes.GetValueOrDefault(s.FuncionarioId)</td>
+                            <td>@(s.Tipo == TipoSolicitacao.Inclusao ? "Incluir marcação" : "Desconsiderar marcação")</td>
+                            <td class="nowrap">@s.Data.ToString("dd/MM/yyyy") <span class="small muted">@Formato.DiaSemana(s.Data)</span></td>
+                            <td>@(s.Horario?.ToString("HH:mm") ?? "—")</td>
+                            <td>@s.Motivo @if (s.RespostaRh is not null) { <div class="small muted">RH: @s.RespostaRh</div> }</td>
+                            <td class="small nowrap">@s.CriadaEm.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                            <td class="right nowrap">
+                                <a class="btn btn-fantasma btn-sm" href="@($"/espelho?funcionario={s.FuncionarioId}&inicio={InicioMes(s.Data):yyyy-MM-dd}&fim={s.Data:yyyy-MM-dd}")">Espelho</a>
+                                @if (s.Status == StatusSolicitacao.Pendente && _rh)
+                                {
+                                    <button class="btn btn-sucesso btn-sm" @onclick="() => Abrir(s, true)">Aprovar</button>
+                                    <button class="btn btn-perigo btn-sm" @onclick="() => Abrir(s, false)">Recusar</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="@(_aprovar ? "Aprovar solicitação" : "Recusar solicitação")">
+    <ChildContent>
+        @if (_sel is not null)
+        {
+            <p><b>@_nomes.GetValueOrDefault(_sel.FuncionarioId)</b> — @(_sel.Tipo == TipoSolicitacao.Inclusao ? $"incluir {_sel.Data:dd/MM/yyyy} {_sel.Horario:HH:mm}" : $"desconsiderar marcação de {_sel.Data:dd/MM/yyyy}")</p>
+            <p class="small">Motivo informado: @_sel.Motivo</p>
+            <div class="campo"><label>@(_aprovar ? "Observação (opcional)" : "Motivo da recusa")</label><input type="text" @bind="_resposta" /></div>
+        }
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn @(_aprovar ? "btn-sucesso" : "btn-perigo")" disabled="@Ocupado" @onclick="Confirmar">@(_aprovar ? "Aprovar" : "Recusar")</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private StatusSolicitacao _status = StatusSolicitacao.Pendente;
+    private List<SolicitacaoCorrecao> _lista = [];
+    private Dictionary<Guid, string> _nomes = [];
+    private int _pendentes;
+    private bool _modal, _aprovar, _rh;
+    private SolicitacaoCorrecao? _sel;
+    private string _resposta = "";
+
+    protected override async Task CarregarAsync()
+    {
+        _rh = TemPapel(Roles.AdminEmpresa, Roles.RH);
+        _nomes = await Db.Funcionarios.AsNoTracking().ToDictionaryAsync(f => f.Id, f => f.Nome);
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _lista = await Db.Solicitacoes.AsNoTracking().Where(s => s.Status == _status).OrderByDescending(s => s.CriadaEm).Take(300).ToListAsync();
+        _pendentes = await Db.Solicitacoes.CountAsync(s => s.Status == StatusSolicitacao.Pendente);
+    }
+
+    private async Task Filtrar(StatusSolicitacao s)
+    {
+        _status = s;
+        await Recarregar();
+    }
+
+    private void Abrir(SolicitacaoCorrecao s, bool aprovar)
+    {
+        _sel = s;
+        _aprovar = aprovar;
+        _resposta = "";
+        _modal = true;
+    }
+
+    private async Task Confirmar()
+    {
+        var svc = Svc<SolicitacaoService>();
+        var ok = await Executar(() => _aprovar ? svc.AprovarAsync(_sel!.Id, _resposta, default) : svc.RecusarAsync(_sel!.Id, _resposta, default),
+            _aprovar ? "Solicitação aprovada." : "Solicitação recusada.");
+        if (ok) { _modal = false; await Recarregar(); }
+    }
+}

@@ -1,0 +1,64 @@
+@page "/relatorios"
+@attribute [Authorize(Policy = Politicas.Empresa)]
+@inherits PaginaBase
+
+<PageTitle>Relatórios — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Conformidade" Titulo="Relatórios" Descricao="Relatórios operacionais e gerenciais em Excel, prontos para conferência e para o fechamento da folha." />
+
+<div class="card card-corpo">
+    <div class="filtros">
+        <div class="campo"><label>De</label><input type="date" @bind="_inicio" /></div>
+        <div class="campo"><label>Até</label><input type="date" @bind="_fim" /></div>
+        <div class="campo">
+            <label>Local</label>
+            <select @bind="_est">
+                <option value="">Todos</option>
+                @foreach (var e in _estabelecimentos)
+                {
+                    <option value="@e.Id">@e.Nome</option>
+                }
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="grade grade-3 mt">
+    @foreach (var (num, titulo, texto, tipo) in Itens)
+    {
+        <div class="card suave card-corpo pilha" style="gap:10px">
+            <div class="linha"><span class="numero">@num</span><h3>@titulo</h3></div>
+            <p class="small" style="flex:1">@texto</p>
+            <a class="btn btn-primario" href="@Link(tipo)" target="_blank"><Icone Nome="download" />Baixar Excel</a>
+        </div>
+    }
+    <div class="card suave card-corpo pilha" style="gap:10px">
+        <div class="linha"><span class="numero">4</span><h3>Espelhos de ponto</h3></div>
+        <p class="small" style="flex:1">Espelho individual em PDF (art. 84 da Portaria 671), com marcações originais e tratadas, jornada contratual e totais.</p>
+        <a class="btn btn-secundario" href="/espelho">Abrir espelho</a>
+    </div>
+    <div class="card suave card-corpo pilha" style="gap:10px">
+        <div class="linha"><span class="numero">5</span><h3>AFD e AEJ</h3></div>
+        <p class="small" style="flex:1">Arquivos fiscais assinados digitalmente para entrega à Inspeção do Trabalho.</p>
+        <a class="btn btn-secundario" href="/arquivos-fiscais">Gerar arquivos</a>
+    </div>
+</div>
+
+@code {
+    private DateOnly _inicio = InicioMes(Hoje);
+    private DateOnly _fim = Hoje;
+    private Guid? _est;
+    private List<Estabelecimento> _estabelecimentos = [];
+
+    private static readonly (int, string, string, string)[] Itens =
+    [
+        (1, "Resumo de jornada", "Por funcionário: horas previstas e trabalhadas, extras, atrasos, faltas, inconsistências e saldo de banco de horas.", "resumo"),
+        (2, "Marcações", "Todas as marcações do período com NSR, coletor, situação on-line/off-line, cerca virtual e hash.", "marcacoes"),
+        (3, "Banco de horas", "Saldo consolidado de todos os funcionários ativos.", "banco-horas")
+    ];
+
+    protected override async Task CarregarAsync() =>
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().OrderBy(e => e.Nome).ToListAsync();
+
+    private string Link(string tipo) => $"/download/relatorio/{tipo}?inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}" + (_est is null ? "" : $"&estabelecimentoId={_est}");
+}

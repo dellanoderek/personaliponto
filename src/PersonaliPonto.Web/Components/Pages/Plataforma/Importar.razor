@@ -1,0 +1,94 @@
+@page "/plataforma/importar"
+@attribute [Authorize(Policy = Politicas.Plataforma)]
+@inherits PaginaPlataforma
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Importar planilha — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Super Admin" Titulo="Importar planilha de clientes" Descricao="Traga o controle atual (telefone, razão social, CNPJ, valor, funcionários, meses PAGO/XXXXX, custo, fornecedor e cancelados). Você confere a prévia antes de gravar; clientes já existentes são atualizados pelo CNPJ." />
+
+<div class="card card-corpo">
+    <div class="linha">
+        <InputFile OnChange="Carregar" accept=".xlsx" />
+        @if (_linhas is not null)
+        {
+            <span class="small">@_linhas.Count linhas lidas · @_linhas.Count(l => !l.CnpjValido) com CNPJ inválido · @_linhas.Count(l => l.JaExiste) já cadastradas</span>
+        }
+    </div>
+</div>
+
+@if (_resultado is not null)
+{
+    <div class="alerta @(_resultado.Erros.Count == 0 ? "sucesso" : "aviso") mt">
+        <Icone Nome="info" />
+        <div>
+            <b>@_resultado.Criados</b> clientes criados, <b>@_resultado.Atualizados</b> atualizados, <b>@_resultado.Faturas</b> faturas registradas.
+            @if (_resultado.Erros.Count > 0)
+            {
+                <ul style="margin:6px 0 0;padding-left:18px">@foreach (var e in _resultado.Erros) { <li>@e</li> }</ul>
+            }
+        </div>
+    </div>
+}
+
+@if (_linhas is not null)
+{
+    <div class="card mt">
+        <div class="card-cab">
+            <h2>Prévia</h2>
+            <button class="btn btn-primario" disabled="@(Ocupado || _linhas.All(l => !l.CnpjValido))" @onclick="ConfirmarImportacao">Importar @_linhas.Count(l => l.CnpjValido) clientes</button>
+        </div>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>#</th><th>Cliente</th><th>CNPJ</th><th class="num">Valor</th><th class="num">Func.</th><th class="num">Custo</th><th>Fornecedor</th><th>Meses</th><th>Avisos</th></tr></thead>
+                <tbody>
+                    @foreach (var l in _linhas)
+                    {
+                        <tr style="@(l.CnpjValido ? "" : "background:var(--vermelho-fundo)")">
+                            <td class="small muted">@l.Linha</td>
+                            <td>
+                                <div style="font-weight:600">@l.RazaoSocial</div>
+                                @if (l.Cancelado) { <span class="badge b-cinza">cancelado</span> }
+                                @if (l.JaExiste) { <span class="badge b-azul">atualiza</span> }
+                            </td>
+                            <td class="nowrap small">@Documentos.FormatarCnpj(l.Cnpj)</td>
+                            <td class="num">@Formato.Moeda(l.Valor)</td>
+                            <td class="num">@l.Funcionarios</td>
+                            <td class="num small">@Formato.Moeda(l.Custo)</td>
+                            <td class="small">@l.Fornecedor</td>
+                            <td class="small nowrap">
+                                <span style="color:var(--verde)">@l.Meses.Values.Count(v => v == SituacaoMesImportado.Pago) pagos</span> ·
+                                <span style="color:var(--azul)">@l.Meses.Values.Count(v => v == SituacaoMesImportado.EmAberto) abertos</span> ·
+                                <span class="muted">@l.Meses.Values.Count(v => v == SituacaoMesImportado.NaoCobrado) n/c</span>
+                            </td>
+                            <td class="small" style="color:var(--vermelho)">@string.Join("; ", l.Avisos)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<LinhaImportada>? _linhas;
+    private ResultadoImportacao? _resultado;
+
+    private async Task Carregar(InputFileChangeEventArgs e)
+    {
+        _resultado = null;
+        await Executar(async () =>
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(10 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+            _linhas = await Svc<ImportacaoPlanilhaService>().PreviaAsync(ms, default);
+        });
+    }
+
+    private Task ConfirmarImportacao() => Executar(async () =>
+    {
+        _resultado = await Svc<ImportacaoPlanilhaService>().ImportarAsync(_linhas!, default);
+        _linhas = null;
+    }, "Importação concluída.");
+}

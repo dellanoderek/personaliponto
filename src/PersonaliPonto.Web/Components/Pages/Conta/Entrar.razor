@@ -1,0 +1,64 @@
+@page "/entrar"
+@layout LayoutLimpo
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [AllowAnonymous]
+
+<PageTitle>Entrar — PersonaliPonto</PageTitle>
+
+<div class="auth">
+    <section class="auth-hero">
+        <div class="arco" aria-hidden="true"></div>
+        <div class="marca"><img src="img/logo.png" alt="PersonaliPonto — Ponto eletrônico e gestão de jornada" /></div>
+        <div class="eyebrow">PLATAFORMA INTELIGENTE</div>
+        <h1>DE GESTÃO DE JORNADA</h1>
+        <p style="font-size:17px;max-width:420px">Controle completo da jornada de trabalho em uma única plataforma.</p>
+        <div class="chips">
+            <span>Ponto eletrônico</span><span>Aplicativo</span><span>Espelho de ponto</span>
+            <span>Banco de horas</span><span>Relatórios</span><span>Integrações</span>
+        </div>
+    </section>
+    <section class="auth-form">
+        <div class="auth-card">
+            <h2>Acesse sua conta</h2>
+            <p class="muted" style="margin-bottom:22px">Entre com seu e-mail (ou CPF, para funcionários) e senha.</p>
+            @if (!string.IsNullOrEmpty(Erro))
+            {
+                <div class="alerta erro" style="margin-bottom:16px"><Icone Nome="alerta" /><div>@Erro</div></div>
+            }
+            @if (Mfa == 1)
+            {
+                <div class="alerta info" style="margin-bottom:16px"><Icone Nome="escudo" /><div>Sua conta usa verificação em duas etapas. Informe a senha e o código do aplicativo autenticador.</div></div>
+            }
+            <form method="post" action="/conta/entrar" class="pilha" data-enhance="false">
+                <AntiforgeryToken />
+                <input type="hidden" name="retorno" value="@(Retorno ?? ReturnUrl)" />
+                <div class="campo">
+                    <label for="email">E-mail ou CPF</label>
+                    <input id="email" name="email" type="text" autocomplete="username" required value="@Email" autofocus="@(string.IsNullOrEmpty(Email))" />
+                </div>
+                <div class="campo">
+                    <label for="senha">Senha</label>
+                    <input id="senha" name="senha" type="password" autocomplete="current-password" required autofocus="@(!string.IsNullOrEmpty(Email))" />
+                </div>
+                @if (Mfa == 1)
+                {
+                    <div class="campo">
+                        <label for="codigo">Código de verificação</label>
+                        <input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required />
+                    </div>
+                }
+                <button class="btn btn-primario btn-lg btn-bloco" type="submit">Entrar</button>
+            </form>
+            <p class="small muted mt-lg center">Esqueceu a senha? Solicite a redefinição ao RH da sua empresa.</p>
+            <p class="small muted center" style="margin-top:28px">PERSONALIPONTO | Precisão • Confiança • Resultados</p>
+        </div>
+    </section>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Erro { get; set; }
+    [SupplyParameterFromQuery] public string? Email { get; set; }
+    [SupplyParameterFromQuery] public int? Mfa { get; set; }
+    [SupplyParameterFromQuery] public string? Retorno { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+}

@@ -1,0 +1,213 @@
+@page "/plataforma/faturamento"
+@attribute [Authorize(Policy = Politicas.Plataforma)]
+@inherits PaginaPlataforma
+@using PersonaliPonto.Modules.SaaS.Domain
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Faturamento — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Super Admin" Titulo="Faturamento" Descricao="Quem pagou e quem não pagou, mês a mês. Clique em uma competência para registrar pagamento, marcar como não cobrada ou reabrir.">
+    <Acoes>
+        <div class="campo" style="min-width:100px"><select @bind="_ano" @bind:after="Recarregar">@for (var a = Hoje.Year - 2; a <= Hoje.Year + 1; a++) { <option value="@a">@a</option> }</select></div>
+        <button class="btn btn-secundario" disabled="@Ocupado" @onclick="GerarCompetencia">Gerar faturas de @Hoje.ToString("MM/yyyy")</button>
+        <button class="btn btn-secundario" disabled="@Ocupado" @onclick="Regua">Aplicar régua de cobrança</button>
+        <a class="btn btn-primario" href="@($"/download/plataforma/faturamento?ano={_ano}")" target="_blank"><Icone Nome="download" />Excel</a>
+    </Acoes>
+</Cabecalho>
+
+<div class="card">
+    <div class="card-cab">
+        <div class="filtros">
+            <div class="campo" style="min-width:240px"><label>Buscar</label><input type="search" @bind="_busca" @bind:event="oninput" placeholder="Cliente ou CNPJ" /></div>
+            <label class="checkbox"><input type="checkbox" @bind="_soPendentes" /> Só com pendências</label>
+            <label class="checkbox"><input type="checkbox" @bind="_cancelados" /> Mostrar cancelados</label>
+        </div>
+        <div class="legenda">
+            <span><span class="fat-cel fat-paga">✓</span> pago</span>
+            <span><span class="fat-cel fat-aberta">•</span> em aberto</span>
+            <span><span class="fat-cel fat-vencida">!</span> vencido</span>
+            <span><span class="fat-cel fat-naocobrada">x</span> não cobrado</span>
+        </div>
+    </div>
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead>
+                <tr>
+                    <th>Cliente</th><th class="num">Valor</th>
+                    @for (var m = 1; m <= 12; m++)
+                    {
+                        <th class="center" style="padding:10px 2px">@(new DateTime(_ano, m, 1).ToString("MMM", _br))</th>
+                    }
+                    <th class="num">Vencido</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Filtrados)
+                {
+                    <tr>
+                        <td style="min-width:220px">
+                            <div style="font-weight:600">@c.RazaoSocial</div>
+                            <div class="small muted linha" style="gap:6px">@Documentos.FormatarCnpj(c.Cnpj) <StatusCliente Status="c.Status" /></div>
+                        </td>
+                        <td class="num nowrap">@Formato.Moeda(c.Valor)</td>
+                        @foreach (var (comp, (estado, id)) in c.Meses.OrderBy(x => x.Key))
+                        {
+                            <td class="center" style="padding:6px 2px">
+                                <button class="fat-cel @Classe(estado)" disabled="@(id is null)" title="@($"{comp:MM/yyyy}: {estado}")" @onclick="() => Abrir(c, comp, id)">@Simbolo(estado)</button>
+                            </td>
+                        }
+                        <td class="num nowrap" style="@(c.EmAberto > 0 ? "color:var(--vermelho);font-weight:700" : "")">@(c.EmAberto > 0 ? Formato.Moeda(c.EmAberto) : "—")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td style="font-weight:700;color:var(--titulo)">Recebido no mês</td><td></td>
+                    @for (var m = 1; m <= 12; m++)
+                    {
+                        var comp = new DateOnly(_ano, m, 1);
+                        <td class="center small" style="padding:8px 2px">@Abreviar(_recebidoMes.GetValueOrDefault(comp))</td>
+                    }
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="@($"Fatura {_fatura?.Competencia:MM/yyyy} — {_cliente?.RazaoSocial}")">
+    <ChildContent>
+        @if (_fatura is not null)
+        {
+            <div class="pilha" style="gap:8px">
+                <div class="linha entre"><span>Valor</span><b>@Formato.Moeda(_fatura.Valor)</b></div>
+                <div class="linha entre"><span>Vencimento</span><b>@_fatura.Vencimento.ToString("dd/MM/yyyy")</b></div>
+                <div class="linha entre"><span>Situação</span><b>@_fatura.Status</b></div>
+                @if (_fatura.PagaEm is not null)
+                {
+                    <div class="linha entre"><span>Pago em</span><b>@_fatura.PagaEm?.ToString("dd/MM/yyyy") · @Formato.Moeda(_fatura.ValorPago ?? 0) · @_fatura.FormaPagamento</b></div>
+                }
+                @if (_fatura.Observacao is not null)
+                {
+                    <div class="small muted">@_fatura.Observacao</div>
+                }
+            </div>
+            @if (_fatura.Status is StatusFatura.Aberta)
+            {
+                <div class="form-grade mt">
+                    <div class="campo c-4"><label>Data do pagamento</label><input type="date" @bind="_pagoEm" /></div>
+                    <div class="campo c-4"><label>Valor pago</label><input type="number" step="0.01" @bind="_valorPago" /></div>
+                    <div class="campo c-4">
+                        <label>Forma</label>
+                        <select @bind="_forma"><option>PIX</option><option>Boleto</option><option>Transferência</option><option>Cartão</option><option>Dinheiro</option></select>
+                    </div>
+                    <div class="campo c-12"><label>Observação</label><input type="text" @bind="_obs" /></div>
+                </div>
+            }
+        }
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Fechar</button>
+        @if (_fatura?.Status == StatusFatura.Aberta)
+        {
+            <button class="btn btn-secundario" disabled="@Ocupado" @onclick="NaoCobrar">Não cobrar</button>
+            <button class="btn btn-sucesso" disabled="@Ocupado" @onclick="Pagar">Registrar pagamento</button>
+        }
+        else if (_fatura?.Status is StatusFatura.Paga or StatusFatura.NaoCobrada)
+        {
+            <button class="btn btn-perigo" disabled="@Ocupado" @onclick="Reabrir">Reabrir fatura</button>
+        }
+    </Rodape>
+</Modal>
+
+@code {
+    [SupplyParameterFromQuery] public string? Busca { get; set; }
+    private readonly System.Globalization.CultureInfo _br = new("pt-BR");
+    private int _ano = Hoje.Year;
+    private string _busca = "";
+    private bool _soPendentes, _cancelados;
+    private List<LinhaGrade> _grade = [];
+    private Dictionary<DateOnly, decimal> _recebidoMes = [];
+    private bool _modal;
+    private Fatura? _fatura;
+    private LinhaGrade? _cliente;
+    private DateOnly _pagoEm = Hoje;
+    private decimal _valorPago;
+    private string _forma = "PIX";
+    private string? _obs;
+
+    private IEnumerable<LinhaGrade> Filtrados => _grade
+        .Where(c => _cancelados || c.Status != TenantStatus.Cancelado)
+        .Where(c => !_soPendentes || c.EmAberto > 0 || c.Meses.Values.Any(m => m.Estado is CelulaFatura.Aberta or CelulaFatura.Vencida))
+        .Where(c => string.IsNullOrWhiteSpace(_busca) || c.RazaoSocial.Contains(_busca, StringComparison.OrdinalIgnoreCase) || c.Cnpj.Contains(Documentos.Normalizar(_busca)));
+
+    protected override async Task CarregarAsync()
+    {
+        _busca = Busca ?? "";
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _grade = (await Svc<PainelPlataformaService>().GradeAsync(_ano, null, null, default)).ToList();
+        var ini = new DateOnly(_ano, 1, 1);
+        _recebidoMes = await Db.Faturas.AsNoTracking().Where(f => f.Status == StatusFatura.Paga && f.Competencia >= ini && f.Competencia < ini.AddYears(1))
+            .GroupBy(f => f.Competencia).Select(g => new { g.Key, V = g.Sum(f => f.ValorPago ?? f.Valor) }).ToDictionaryAsync(x => x.Key, x => x.V);
+    }
+
+    private static string Classe(CelulaFatura e) => e switch
+    {
+        CelulaFatura.Paga => "fat-paga", CelulaFatura.Aberta => "fat-aberta", CelulaFatura.Vencida => "fat-vencida",
+        CelulaFatura.NaoCobrada => "fat-naocobrada", CelulaFatura.Cancelada => "fat-cancelada", _ => "fat-vazia"
+    };
+
+    private static string Simbolo(CelulaFatura e) => e switch
+    {
+        CelulaFatura.Paga => "✓", CelulaFatura.Aberta => "•", CelulaFatura.Vencida => "!", CelulaFatura.NaoCobrada => "x", CelulaFatura.Cancelada => "–", _ => ""
+    };
+
+    private static string Abreviar(decimal v) => v == 0 ? "—" : v >= 1000 ? $"{v / 1000:0.#}k" : v.ToString("0");
+
+    private async Task Abrir(LinhaGrade c, DateOnly comp, Guid? id)
+    {
+        if (id is null) return;
+        _cliente = c;
+        _fatura = await Db.Faturas.AsNoTracking().FirstAsync(f => f.Id == id);
+        _pagoEm = Hoje;
+        _valorPago = _fatura.Valor;
+        _obs = null;
+        _modal = true;
+    }
+
+    private async Task Pagar()
+    {
+        if (await Executar(() => Svc<FaturamentoService>().RegistrarPagamentoAsync(_fatura!.Id, _pagoEm, _valorPago, _forma, _obs, default), "Pagamento registrado."))
+        { _modal = false; await Recarregar(); }
+    }
+
+    private async Task NaoCobrar()
+    {
+        if (await Executar(() => Svc<FaturamentoService>().MarcarNaoCobradaAsync(_fatura!.Id, _obs ?? "Não cobrada", default), "Fatura marcada como não cobrada."))
+        { _modal = false; await Recarregar(); }
+    }
+
+    private async Task Reabrir()
+    {
+        if (await Executar(() => Svc<FaturamentoService>().EstornarPagamentoAsync(_fatura!.Id, "Reaberta pelo Super Admin", default), "Fatura reaberta."))
+        { _modal = false; await Recarregar(); }
+    }
+
+    private Task GerarCompetencia() => Executar(async () =>
+    {
+        var n = await Svc<FaturamentoService>().GerarCompetenciaAsync(InicioMes(Hoje), default);
+        Avisos.Sucesso(n == 0 ? "As faturas do mês já estavam geradas." : $"{n} faturas geradas.");
+        await Recarregar();
+    });
+
+    private Task Regua() => Executar(async () =>
+    {
+        var n = await Svc<FaturamentoService>().ProcessarInadimplenciaAsync(default);
+        Avisos.Sucesso(n == 0 ? "Nenhuma alteração de situação." : $"{n} clientes tiveram a situação atualizada.");
+        await Recarregar();
+    });
+}

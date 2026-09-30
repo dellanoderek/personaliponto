@@ -1,0 +1,84 @@
+@page "/arquivos-fiscais"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+@using PersonaliPonto.Infrastructure.Seguranca
+@using Microsoft.Extensions.Options
+
+<PageTitle>AFD e AEJ — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Conformidade" Titulo="Arquivos fiscais (AFD e AEJ)" Descricao="Gerados conforme os leiautes vigentes publicados pelo MTE (AFD versão 004, AEJ versão 002) e assinados em CAdES destacado (.p7s). Cada pacote .zip contém o arquivo e sua assinatura." />
+
+@if (!_certIcp || string.IsNullOrWhiteSpace(_inpi))
+{
+    <div class="alerta aviso"><Icone Nome="alerta" />
+        <div>
+            @if (!_certIcp) { <div>O certificado de assinatura configurado <b>não é ICP-Brasil</b>. Para validade legal, configure o e-CNPJ A1 do desenvolvedor (art. 88).</div> }
+            @if (string.IsNullOrWhiteSpace(_inpi)) { <div>O <b>número de registro no INPI</b> do REP-P não está configurado (art. 91).</div> }
+        </div>
+    </div>
+}
+
+<div class="grade grade-2 mt">
+    <div class="card">
+        <div class="card-cab"><div class="linha"><span class="numero">1</span><h2>AFD — Arquivo Fonte de Dados</h2></div></div>
+        <div class="card-corpo pilha">
+            <p class="small">Registros originais do REP-P (tipos 1, 2, 5, 6, 7 e 9), por estabelecimento, ordenados por NSR, com hash SHA-256 encadeado em cada marcação.</p>
+            <div class="form-grade">
+                <div class="campo c-12">
+                    <label>Estabelecimento</label>
+                    <select @bind="_est">
+                        @foreach (var e in _estabelecimentos)
+                        {
+                            <option value="@e.Id">@e.Nome — @Documentos.FormatarCnpj(e.Identificador)</option>
+                        }
+                    </select>
+                </div>
+                <div class="campo c-6"><label>De</label><input type="date" @bind="_inicio" /></div>
+                <div class="campo c-6"><label>Até</label><input type="date" @bind="_fim" /></div>
+            </div>
+            <a class="btn btn-primario" href="@($"/download/afd?estabelecimentoId={_est}&inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}")" target="_blank"><Icone Nome="download" />Gerar AFD assinado</a>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-cab"><div class="linha"><span class="numero">2</span><h2>AEJ — Arquivo Eletrônico de Jornada</h2></div></div>
+        <div class="card-corpo pilha">
+            <p class="small">Dados tratados pelo PTRP: vínculos, horários contratuais, marcações (originais, incluídas, desconsideradas e pré-assinaladas), ausências e banco de horas.</p>
+            <p class="small muted">Usa o mesmo estabelecimento e período ao lado.</p>
+            <a class="btn btn-primario" href="@($"/download/aej?estabelecimentoId={_est}&inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}")" target="_blank"><Icone Nome="download" />Gerar AEJ assinado</a>
+        </div>
+    </div>
+</div>
+
+<div class="card marinho mt">
+    <div class="card-corpo grade grade-2">
+        <div>
+            <div class="small" style="color:var(--ciano);font-weight:700;letter-spacing:.1em">PORTARIA MTP Nº 671/2021</div>
+            <h2 style="margin:6px 0 12px">Entrega à fiscalização</h2>
+            <p>O AFD de REP-P deve ser prontamente gerado e entregue quando solicitado pelo Auditor-Fiscal do Trabalho (art. 81, §2º). O AEJ e os relatórios do PTRP devem ser disponibilizados em até 2 dias (art. 85).</p>
+        </div>
+        <ul class="timeline">
+            <li>Assinatura<span>@(_titular ?? "—") · CAdES destacado (.p7s)</span></li>
+            <li>Codificação<span>ISO-8859-1, linhas terminadas em CR LF</span></li>
+            <li>Validação<span>cada AFD é conferido byte a byte antes da entrega nos testes automatizados</span></li>
+        </ul>
+    </div>
+</div>
+
+@code {
+    private List<Estabelecimento> _estabelecimentos = [];
+    private Guid _est;
+    private DateOnly _inicio = InicioMes(Hoje);
+    private DateOnly _fim = Hoje;
+    private bool _certIcp;
+    private string? _inpi, _titular;
+
+    protected override async Task CarregarAsync()
+    {
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().OrderBy(e => e.Nome).ToListAsync();
+        _est = _estabelecimentos.FirstOrDefault()?.Id ?? Guid.Empty;
+        var a = Svc<AssinaturaDigital>();
+        _certIcp = a.CertificadoIcpBrasil;
+        _titular = a.TitularCertificado;
+        _inpi = Svc<IOptions<RepPOptions>>().Value.NumeroRegistroInpi;
+    }
+}

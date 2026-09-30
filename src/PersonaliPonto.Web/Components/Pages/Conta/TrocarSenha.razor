@@ -1,0 +1,31 @@
+@page "/trocar-senha"
+@layout LayoutLimpo
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [Authorize]
+
+<PageTitle>Definir nova senha — PersonaliPonto</PageTitle>
+
+<div class="auth" style="grid-template-columns:1fr">
+    <section class="auth-form">
+        <div class="auth-card card card-corpo" style="padding:32px">
+            <img src="img/logo.png" alt="PersonaliPonto" style="width:200px;display:block;margin-bottom:20px" />
+            <h2>Defina uma nova senha</h2>
+            <p class="muted" style="margin-bottom:20px">Por segurança, troque a senha temporária antes de continuar. Use ao menos 10 caracteres, com letras e números.</p>
+            @if (!string.IsNullOrEmpty(Erro))
+            {
+                <div class="alerta erro" style="margin-bottom:16px"><Icone Nome="alerta" /><div>@Erro</div></div>
+            }
+            <form method="post" action="/conta/senha" class="pilha" data-enhance="false">
+                <AntiforgeryToken />
+                <div class="campo"><label for="atual">Senha atual</label><input id="atual" name="atual" type="password" autocomplete="current-password" required /></div>
+                <div class="campo"><label for="nova">Nova senha</label><input id="nova" name="nova" type="password" autocomplete="new-password" minlength="10" required /></div>
+                <div class="campo"><label for="confirmacao">Confirme a nova senha</label><input id="confirmacao" name="confirmacao" type="password" autocomplete="new-password" minlength="10" required /></div>
+                <button class="btn btn-primario btn-lg btn-bloco" type="submit">Salvar e continuar</button>
+            </form>
+        </div>
+    </section>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Erro { get; set; }
+}

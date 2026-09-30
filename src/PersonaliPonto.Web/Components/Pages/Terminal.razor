@@ -1,0 +1,59 @@
+@page "/terminal"
+@layout LayoutLimpo
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [AllowAnonymous]
+
+<PageTitle>Terminal de ponto — PersonaliPonto</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex" />
+    <link rel="manifest" href="terminal.webmanifest" />
+</HeadContent>
+
+<div class="terminal" id="terminal">
+    <header>
+        <div class="marca"><img src="img/logo.png" alt="PersonaliPonto" /></div>
+        <div class="linha" style="gap:10px">
+            <span class="fila" id="t-fila"></span>
+            <span class="status" id="t-status"><i></i><span>Conectando...</span></span>
+        </div>
+    </header>
+    <div class="corpo">
+        <section>
+            <div class="small" style="color:#9fd8f7;font-weight:700;letter-spacing:.14em">HORA OFICIAL · REP-P</div>
+            <div class="relogio" id="t-hora">--:--:--</div>
+            <div class="data" id="t-data">&nbsp;</div>
+            <div class="local" id="t-local"></div>
+        </section>
+        <section class="painel" id="t-painel">
+            <div id="t-etapa-id">
+                <h2 style="margin-bottom:4px">Registrar ponto</h2>
+                <p class="small" style="margin-bottom:14px" id="t-instrucao">Digite sua matrícula ou CPF</p>
+                <div class="visor" id="t-visor"></div>
+                <div class="teclado" id="t-teclado">
+                    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+                    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+                    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+                    <button class="limpar" data-k="limpar">Limpar</button><button data-k="0">0</button><button class="acao" data-k="ok">Avançar</button>
+                </div>
+                <p class="small center muted" style="margin-top:12px" id="t-erro"></p>
+            </div>
+            <div id="t-etapa-recibo" class="recibo hidden">
+                <div class="ok"><svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5" /></svg></div>
+                <div style="font-weight:700;color:var(--titulo)" id="r-nome"></div>
+                <div class="hora" id="r-hora"></div>
+                <div class="small" id="r-data"></div>
+                <div class="small muted" style="margin-top:8px" id="r-nsr"></div>
+                <div class="mono small muted" style="margin-top:4px" id="r-hash"></div>
+                <div class="alerta aviso small hidden" style="margin-top:12px;text-align:left" id="r-offline">Sem conexão: marcação guardada neste terminal e enviada automaticamente assim que a internet voltar.</div>
+                <p class="small muted" style="margin-top:12px">O comprovante fica disponível no aplicativo e na área do funcionário.</p>
+            </div>
+            <div id="t-inativo" class="hidden center">
+                <h2>Terminal não ativado</h2>
+                <p class="small" style="margin:10px 0 18px">Um usuário do RH deve ativar este navegador em <b>Configurações › Terminais de ponto</b>.</p>
+                <a class="btn btn-primario" href="/terminais">Ativar terminal</a>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script src="js/terminal.js"></script>

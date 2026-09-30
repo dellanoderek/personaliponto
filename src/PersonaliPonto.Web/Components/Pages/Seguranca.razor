@@ -1,0 +1,175 @@
+@page "/seguranca"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Segurança — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Conformidade" Titulo="Segurança e antifraude" Descricao="Alertas de padrões anômalos, aparelhos vinculados e políticas de segurança da marcação. Os alertas não bloqueiam: sinalizam para análise do RH." />
+
+<div class="abas">
+    <button class="@(_aba == 0 ? "ativa" : "")" @onclick="() => _aba = 0">Alertas</button>
+    <button class="@(_aba == 1 ? "ativa" : "")" @onclick="() => _aba = 1">Aparelhos (@_dispositivos.Count(d => d.Status == StatusDispositivo.Pendente) pendentes)</button>
+    <button class="@(_aba == 2 ? "ativa" : "")" @onclick="() => _aba = 2">Políticas</button>
+</div>
+
+@if (_aba == 0)
+{
+    <div class="card">
+        <div class="card-cab">
+            <div class="filtros">
+                <div class="campo"><label>De</label><input type="date" @bind="_de" /></div>
+                <div class="campo"><label>Até</label><input type="date" @bind="_ate" /></div>
+                <button class="btn btn-primario" disabled="@Ocupado" @onclick="Analisar">Analisar</button>
+            </div>
+            <span class="small muted">@_alertas.Count alertas</span>
+        </div>
+        @if (_alertas.Count == 0)
+        {
+            <Vazio Texto="Nenhum padrão anômalo no período." Icone="escudo" />
+        }
+        else
+        {
+            <table class="tabela">
+                <thead><tr><th>Gravidade</th><th>Funcionário</th><th>Tipo</th><th>Quando</th><th>Detalhe</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var a in _alertas)
+                    {
+                        <tr>
+                            <td><span class="badge @(a.Gravidade >= 3 ? "b-vermelho" : a.Gravidade == 2 ? "b-amarelo" : "b-azul")">@(a.Gravidade >= 3 ? "alta" : a.Gravidade == 2 ? "média" : "baixa")</span></td>
+                            <td style="font-weight:600">@a.Funcionario</td>
+                            <td>@Tipo(a.Tipo)</td>
+                            <td class="small nowrap">@a.Quando.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                            <td class="small">@a.Detalhe</td>
+                            <td class="right"><a class="btn btn-fantasma btn-sm" href="@($"/espelho?funcionario={a.FuncionarioId}")">Espelho</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+else if (_aba == 1)
+{
+    <div class="card">
+        <table class="tabela">
+            <thead><tr><th>Funcionário</th><th>Aparelho</th><th>Primeiro uso</th><th>Último uso</th><th>Situação</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var d in _dispositivos)
+                {
+                    <tr>
+                        <td style="font-weight:600">@_nomes.GetValueOrDefault(d.FuncionarioId)</td>
+                        <td class="small">@(d.DispositivoId.Contains('|') ? d.DispositivoId.Split('|')[1] : d.DispositivoId)</td>
+                        <td class="small">@d.PrimeiroUso.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td class="small">@d.UltimoUso.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>
+                            @switch (d.Status)
+                            {
+                                case StatusDispositivo.Autorizado: <span class="badge b-verde">autorizado</span> break;
+                                case StatusDispositivo.Revogado: <span class="badge b-vermelho">bloqueado</span> break;
+                                default: <span class="badge b-amarelo">pendente</span> break;
+                            }
+                        </td>
+                        <td class="right nowrap">
+                            @if (d.Status != StatusDispositivo.Autorizado)
+                            {
+                                <button class="btn btn-sucesso btn-sm" @onclick="() => Alterar(d, StatusDispositivo.Autorizado)">Autorizar</button>
+                            }
+                            @if (d.Status != StatusDispositivo.Revogado)
+                            {
+                                <button class="btn btn-perigo btn-sm" @onclick="() => Alterar(d, StatusDispositivo.Revogado)">Bloquear</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (_dispositivos.Count == 0)
+        {
+            <Vazio Texto="Nenhum aparelho registrado ainda. Eles aparecem após a primeira marcação pelo aplicativo." Icone="terminal" />
+        }
+    </div>
+}
+else
+{
+    <div class="grade grade-2">
+        <div class="card card-corpo pilha">
+            <h2>Vínculo de aparelho</h2>
+            <p class="small">Quando ativado, cada novo celular precisa ser autorizado pelo RH antes de registrar ponto pelo aplicativo. Reduz marcações feitas por terceiros.</p>
+            <label class="checkbox"><input type="checkbox" @bind="_exigir" /> Exigir aparelho autorizado</label>
+        </div>
+        <div class="card card-corpo pilha">
+            <h2>Foto na marcação</h2>
+            <div class="alerta aviso small"><Icone Nome="alerta" /><div>A foto é dado pessoal. Ative somente após avaliação de LGPD (finalidade, base legal, transparência aos funcionários). As fotos são excluídas automaticamente ao fim do prazo de retenção. Biometria/reconhecimento facial não é utilizado.</div></div>
+            <label class="checkbox"><input type="checkbox" @bind="_foto" /> Solicitar foto no aplicativo após a marcação</label>
+            <div class="campo" style="max-width:220px"><label>Retenção (dias)</label><input type="number" min="1" max="1825" @bind="_retencao" /></div>
+            @if (_foto && !_fotoSalva)
+            {
+                <label class="checkbox"><input type="checkbox" @bind="_lgpd" /> Confirmo que a avaliação de LGPD foi realizada e os funcionários foram informados.</label>
+            }
+            @if (_cfg?.AvaliacaoLgpdEm is { } em)
+            {
+                <span class="small muted">Habilitada por @_cfg.AvaliacaoLgpdResponsavel em @em.ToLocalTime().ToString("dd/MM/yyyy HH:mm").</span>
+            }
+        </div>
+    </div>
+    <div class="linha mt"><button class="btn btn-primario" disabled="@Ocupado" @onclick="Salvar">Salvar políticas</button></div>
+}
+
+@code {
+    private int _aba;
+    private DateOnly _de = Hoje.AddDays(-30), _ate = Hoje;
+    private IReadOnlyList<AlertaSeguranca> _alertas = [];
+    private List<DispositivoFuncionario> _dispositivos = [];
+    private Dictionary<Guid, string> _nomes = [];
+    private ConfiguracaoSeguranca? _cfg;
+    private bool _exigir, _foto, _fotoSalva, _lgpd;
+    private int _retencao = 90;
+
+    protected override async Task CarregarAsync()
+    {
+        _nomes = await Db.Funcionarios.AsNoTracking().ToDictionaryAsync(f => f.Id, f => f.Nome);
+        await CarregarConfig();
+        await CarregarDispositivos();
+        await Analisar();
+    }
+
+    private async Task CarregarConfig()
+    {
+        _cfg = await Svc<ConfiguracaoSegurancaService>().ObterAsync(default);
+        _exigir = _cfg.ExigirDispositivoAutorizado;
+        _foto = _fotoSalva = _cfg.FotoNaMarcacao;
+        _retencao = _cfg.RetencaoFotoDias;
+    }
+
+    private async Task CarregarDispositivos() =>
+        _dispositivos = await Db.Dispositivos.AsNoTracking().OrderBy(d => d.Status).ThenByDescending(d => d.UltimoUso).ToListAsync();
+
+    private Task Analisar() => Executar(async () =>
+    {
+        var de = new DateTimeOffset(_de.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(-3));
+        var ate = new DateTimeOffset(_ate.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(-3));
+        _alertas = await Svc<AnaliseFraudeService>().AnalisarAsync(de, ate, default);
+    });
+
+    private static string Tipo(TipoAlerta t) => t switch
+    {
+        TipoAlerta.ForaDaCerca => "Fora da cerca",
+        TipoAlerta.GpsImpreciso => "GPS impreciso",
+        TipoAlerta.DeslocamentoImpossivel => "Deslocamento impossível",
+        TipoAlerta.AparelhoNaoHabitual => "Aparelho não habitual",
+        TipoAlerta.OfflineRecorrente => "Off-line recorrente",
+        _ => "Aparelho compartilhado"
+    };
+
+    private async Task Alterar(DispositivoFuncionario d, StatusDispositivo s)
+    {
+        if (await Executar(() => Svc<DispositivoService>().AlterarAsync(d.Id, s, default), "Aparelho atualizado.")) await CarregarDispositivos();
+    }
+
+    private async Task Salvar()
+    {
+        if (await Executar(() => Svc<ConfiguracaoSegurancaService>().SalvarAsync(_exigir, _foto, _retencao, _lgpd, default), "Políticas salvas.")) await CarregarConfig();
+    }
+}

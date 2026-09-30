@@ -1,0 +1,160 @@
+@page "/meu-ponto"
+@attribute [Authorize(Policy = Politicas.Funcionario)]
+@inherits PaginaBase
+@using PersonaliPonto.Core.RepP.Apuracao
+
+<PageTitle>Meu ponto — PersonaliPonto</PageTitle>
+
+<div class="grade grade-3">
+    <div class="card span-2">
+        <div class="bater">
+            <div class="small" style="color:var(--azul);font-weight:700;letter-spacing:.1em">HORA OFICIAL (NTP)</div>
+            <div class="hora" id="relogio-hora">--:--:--</div>
+            <div id="relogio-data" style="text-transform:capitalize">&nbsp;</div>
+            <button class="botao" disabled="@Ocupado" @onclick="Registrar">@(Ocupado ? "Registrando..." : "Registrar ponto")</button>
+            <div class="small muted center">Registro via navegador (coletor 02). Sua localização é enviada quando autorizada.</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-cab"><h2>Registros de hoje</h2><button class="btn btn-fantasma btn-sm" @onclick="Atualizar"><Icone Nome="setas" /></button></div>
+        <div class="card-corpo">
+            @if (_hoje.Count == 0)
+            {
+                <p class="muted">Você ainda não iniciou sua jornada.</p>
+            }
+            else
+            {
+                <div class="linha">
+                    @foreach (var m in _hoje)
+                    {
+                        <a class="chip" href="@($"/download/comprovante/{m.Id}")" target="_blank" title="Comprovante NSR @m.Nsr">@m.DataHoraMarcacao.ToOffset(_offset).ToString("HH:mm")</a>
+                    }
+                </div>
+            }
+            @if (_jornada is not null)
+            {
+                <div class="mt pilha" style="gap:6px">
+                    <div class="linha entre small"><span>Jornada prevista</span><b>@Formato.Hhmm(_jornada.MinutosPrevistos)</b></div>
+                    <div class="linha entre small"><span>Trabalhado até agora</span><b>@Formato.Hhmm(_trabalhadoAgora)</b></div>
+                    <div class="linha entre small"><span>Restante</span><b>@Formato.Hhmm(Math.Max(0, _jornada.MinutosPrevistos - _trabalhadoAgora))</b></div>
+                    @if (_jornada.HorarioContratual is not null)
+                    {
+                        <div class="small muted">Horário: @_jornada.HorarioContratual</div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card mt">
+    <div class="card-cab"><h2>Últimos dias</h2><a class="btn btn-secundario btn-sm" href="/meu-ponto/espelho">Ver espelho completo</a></div>
+    <table class="tabela">
+        <thead><tr><th>Dia</th><th>Marcações</th><th class="num">Trabalhado</th><th class="num">Extra</th><th class="num">Falta</th></tr></thead>
+        <tbody>
+            @foreach (var d in _ultimos)
+            {
+                <tr>
+                    <td class="nowrap"><b>@d.Data.ToString("dd/MM")</b> <span class="small muted">@Formato.DiaSemana(d.Data)</span></td>
+                    <td>@string.Join("  ", d.Marcacoes.Where(m => !m.Desconsiderada).Select(m => m.DataHora.ToString("HH:mm")))</td>
+                    <td class="num">@Formato.Hhmm(d.MinutosTrabalhados)</td>
+                    <td class="num" style="color:var(--verde)">@Formato.Hhmm(d.MinutosExtras)</td>
+                    <td class="num" style="color:var(--vermelho)">@Formato.Hhmm(d.MinutosFalta)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<Modal @bind-Aberto="_sucesso" Titulo="Ponto registrado com sucesso!">
+    <ChildContent>
+        @if (_ultimo is not null)
+        {
+            <div class="center pilha" style="gap:6px">
+                <div style="width:72px;height:72px;border-radius:50%;background:var(--verde-fundo);color:var(--verde);display:grid;place-items:center;margin:0 auto"><Icone Nome="check" /></div>
+                <div style="font-size:44px;font-weight:700;color:var(--marinho)">@_ultimo.DataHoraMarcacao.ToOffset(_offset).ToString("HH:mm")</div>
+                <div>@_ultimo.DataHoraMarcacao.ToOffset(_offset).ToString("dddd, dd 'de' MMMM")</div>
+                <div class="small muted">NSR @_ultimo.Nsr.ToString("000000000")</div>
+                <div class="mono small muted">@_ultimo.Hash</div>
+            </div>
+        }
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _sucesso = false">Fechar</button>
+        @if (_ultimo is not null)
+        {
+            <a class="btn btn-primario" href="@($"/download/comprovante/{_ultimo.Id}")" target="_blank">Visualizar comprovante</a>
+        }
+    </Rodape>
+</Modal>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+    private Funcionario? _f;
+    private List<UltimaMarcacaoDto> _hoje = [];
+    private List<EspelhoDiaDto> _ultimos = [];
+    private EspelhoDiaDto? _jornada;
+    private int _trabalhadoAgora;
+    private TimeSpan _offset = TimeSpan.FromHours(-3);
+    private string _fuso = "America/Sao_Paulo";
+    private bool _sucesso;
+    private MarcacaoRegistradaDto? _ultimo;
+    private bool _relogioIniciado;
+
+    protected override async Task CarregarAsync()
+    {
+        _f = await Db.Funcionarios.AsNoTracking().Include(f => f.Estabelecimento).FirstOrDefaultAsync(f => f.Id == FuncionarioId);
+        if (_f is null) return;
+        _fuso = _f.Estabelecimento!.FusoHorario;
+        _offset = TimeZoneInfo.FindSystemTimeZoneById(_fuso).GetUtcOffset(DateTimeOffset.UtcNow);
+        await Atualizar();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_relogioIniciado && _f is not null)
+        {
+            _relogioIniciado = true;
+            await Js.InvokeVoidAsync("personaliPonto.relogio", "relogio-hora", "relogio-data", Svc<IClock>().UtcNow.ToUnixTimeMilliseconds(), _fuso);
+        }
+    }
+
+    private async Task Atualizar()
+    {
+        if (_f is null) return;
+        var ult = await Svc<MarcacaoService>().UltimasAsync(_f.Id, 40, default);
+        var hoje = Hoje;
+        _hoje = ult.Where(m => DateOnly.FromDateTime(m.DataHoraMarcacao.ToOffset(_offset).DateTime) == hoje).OrderBy(m => m.DataHoraMarcacao).ToList();
+        var esp = await Svc<EspelhoService>().GerarAsync(_f.Id, hoje.AddDays(-7), hoje, default);
+        _jornada = esp.Dias.LastOrDefault();
+        _ultimos = esp.Dias.Where(d => d.Data < hoje).OrderByDescending(d => d.Data).ToList();
+        // Trabalhado até agora: considera o período em aberto (entrada sem saída) até o horário atual.
+        var marcas = _jornada?.Marcacoes.Where(m => !m.Desconsiderada).Select(m => m.DataHora).OrderBy(x => x).ToList() ?? [];
+        _trabalhadoAgora = 0;
+        for (var i = 0; i < marcas.Count; i += 2)
+        {
+            var fim = i + 1 < marcas.Count ? marcas[i + 1] : Svc<IClock>().UtcNow;
+            _trabalhadoAgora += (int)Math.Max(0, (fim - marcas[i]).TotalMinutes);
+        }
+    }
+
+    private sealed record Posicao(double Latitude, double Longitude, double Precisao);
+
+    private async Task Registrar()
+    {
+        Posicao? pos = null;
+        try { pos = await Js.InvokeAsync<Posicao?>("personaliPonto.localizacao"); } catch { }
+        var ok = await Executar(async () =>
+        {
+            var f = await Db.Funcionarios.FirstAsync(x => x.Id == FuncionarioId);
+            _ultimo = await Svc<MarcacaoService>().RegistrarAsync(f,
+                new RegistrarMarcacaoRequest(Guid.NewGuid(), false, null, null, pos?.Latitude, pos?.Longitude, "web"),
+                Coletor.Browser, null, null, default);
+        });
+        if (ok)
+        {
+            _sucesso = true;
+            await Atualizar();
+        }
+    }
+}

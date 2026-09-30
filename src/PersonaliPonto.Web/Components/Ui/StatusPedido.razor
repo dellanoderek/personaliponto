@@ -1,0 +1,12 @@
+@using PersonaliPonto.Modules.RH.Domain
+@switch (Status)
+{
+    case StatusSolicitacao.Pendente: <span class="badge b-amarelo">pendente</span> break;
+    case StatusSolicitacao.Aprovada: <span class="badge b-verde">aprovada</span> break;
+    case StatusSolicitacao.Recusada: <span class="badge b-vermelho">recusada</span> break;
+    default: <span class="badge b-cinza">cancelada</span> break;
+}
+
+@code {
+    [Parameter] public StatusSolicitacao Status { get; set; }
+}

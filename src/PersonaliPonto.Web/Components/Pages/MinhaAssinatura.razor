@@ -1,0 +1,73 @@
+@page "/minha-assinatura"
+@attribute [Authorize(Policy = Politicas.Admin)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.SaaS.Domain
+
+<PageTitle>Minha assinatura — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Configurações" Titulo="Minha assinatura" Descricao="Contrato, faturas e situação da sua conta PersonaliPonto." />
+
+@if (_assinatura is null)
+{
+    <div class="card"><Vazio Texto="Nenhum contrato encontrado. Entre em contato com o suporte." Icone="cartao" /></div>
+}
+else
+{
+    @if (_status is TenantStatus.Inadimplente or TenantStatus.Suspenso)
+    {
+        <div class="alerta @(_status == TenantStatus.Suspenso ? "erro" : "aviso")" style="margin-bottom:16px"><Icone Nome="alerta" />
+            <div>@(_status == TenantStatus.Suspenso
+                ? "Conta suspensa por pendência financeira: novas marcações e cadastros estão bloqueados. Espelhos, comprovantes, AFD e AEJ continuam disponíveis."
+                : "Existem faturas em atraso. Regularize para evitar a suspensão do uso.")</div>
+        </div>
+    }
+    <div class="grade grade-4">
+        <Kpi Rotulo="Situação" Valor="@_status.ToString()" />
+        <Kpi Rotulo="Valor mensal" Valor="@Formato.Moeda(_assinatura.ValorMensal)" Detalhe="@($"vencimento dia {_assinatura.DiaVencimento}")" />
+        <Kpi Rotulo="Funcionários contratados" Valor="@_assinatura.FuncionariosContratados.ToString()" Detalhe="@($"{_ativos} ativos cadastrados")" Estado="@(_ativos > _assinatura.FuncionariosContratados && _assinatura.FuncionariosContratados > 0 ? "alerta" : null)" />
+        <Kpi Rotulo="Cliente desde" Valor="@_assinatura.Inicio.ToString("MM/yyyy")" />
+    </div>
+    <div class="card mt">
+        <div class="card-cab"><h2>Faturas</h2></div>
+        <table class="tabela">
+            <thead><tr><th>Competência</th><th>Vencimento</th><th class="num">Valor</th><th>Situação</th><th>Pagamento</th></tr></thead>
+            <tbody>
+                @foreach (var f in _faturas)
+                {
+                    <tr>
+                        <td style="font-weight:600">@f.Competencia.ToString("MM/yyyy")</td>
+                        <td>@f.Vencimento.ToString("dd/MM/yyyy")</td>
+                        <td class="num">@Formato.Moeda(f.Valor)</td>
+                        <td>
+                            @switch (f.Status)
+                            {
+                                case StatusFatura.Paga: <span class="badge b-verde">paga</span> break;
+                                case StatusFatura.NaoCobrada: <span class="badge b-cinza">não cobrada</span> break;
+                                case StatusFatura.Cancelada: <span class="badge b-cinza">cancelada</span> break;
+                                default:
+                                    if (f.Vencida(Hoje)) { <span class="badge b-vermelho">vencida</span> } else { <span class="badge b-azul">em aberto</span> }
+                                    break;
+                            }
+                        </td>
+                        <td class="small">@(f.PagaEm?.ToString("dd/MM/yyyy") ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private Assinatura? _assinatura;
+    private List<Fatura> _faturas = [];
+    private TenantStatus _status;
+    private int _ativos;
+
+    protected override async Task CarregarAsync()
+    {
+        _assinatura = await Db.Assinaturas.AsNoTracking().FirstOrDefaultAsync();
+        _faturas = await Db.Faturas.AsNoTracking().OrderByDescending(f => f.Competencia).Take(24).ToListAsync();
+        _status = await Db.Tenants.AsNoTracking().Select(t => t.Status).FirstOrDefaultAsync();
+        _ativos = await Db.Funcionarios.CountAsync(f => f.Ativo);
+    }
+}

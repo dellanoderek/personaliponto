@@ -1,0 +1,330 @@
+@page "/espelho"
+@attribute [Authorize(Policy = Politicas.Empresa)]
+@inherits PaginaBase
+@using PersonaliPonto.Modules.RH.Domain
+@using PersonaliPonto.Modules.RH.Services
+
+<PageTitle>Espelho de ponto — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Operação" Titulo="Espelho de ponto e tratamento" Descricao="Marcações originais e tratadas (incluídas, desconsideradas, pré-assinaladas). O registro original nunca é alterado: todo ajuste gera um tratamento vinculado e auditado.">
+    <Acoes>
+        @if (_espelho is not null)
+        {
+            <a class="btn btn-secundario" href="@($"/download/espelho?funcionarioId={_funcionarioId}&inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}")" target="_blank"><Icone Nome="download" />PDF</a>
+        }
+    </Acoes>
+</Cabecalho>
+
+<div class="card">
+    <div class="card-corpo">
+        <div class="filtros">
+            <div class="campo" style="min-width:300px">
+                <label>Funcionário</label>
+                <select @bind="_funcionarioId" @bind:after="Carregar">
+                    <option value="">Selecione...</option>
+                    @foreach (var f in _funcionarios)
+                    {
+                        <option value="@f.Id">@f.Nome (@f.Matricula)</option>
+                    }
+                </select>
+            </div>
+            <div class="campo"><label>Competência</label><input type="month" value="@_inicio.ToString("yyyy-MM")" @onchange="Mes" /></div>
+            <div class="campo"><label>De</label><input type="date" @bind="_inicio" @bind:after="Carregar" /></div>
+            <div class="campo"><label>Até</label><input type="date" @bind="_fim" @bind:after="Carregar" /></div>
+        </div>
+    </div>
+</div>
+
+@if (_funcionarioId is null)
+{
+    <div class="card mt"><Vazio Texto="Selecione um funcionário para ver o espelho." Icone="espelho" /></div>
+}
+else if (_espelho is null)
+{
+    <Carregando />
+}
+else
+{
+    @if (_fechado)
+    {
+        <div class="alerta aviso mt"><Icone Nome="cadeado" /><div>Este período está fechado. Para tratar marcações, reabra o fechamento em <a href="/fechamento">Fechamento</a>.</div></div>
+    }
+    <div class="grade grade-5 mt">
+        <Kpi Rotulo="Trabalhado" Valor="@Formato.Hhmm(_espelho.TotalTrabalhado)" />
+        <Kpi Rotulo="Extras" Valor="@Formato.Hhmm(_espelho.TotalExtras)" />
+        <Kpi Rotulo="Atrasos" Valor="@Formato.Hhmm(_espelho.TotalAtrasos)" Estado="@(_espelho.TotalAtrasos > 0 ? "alerta" : null)" />
+        <Kpi Rotulo="Faltas" Valor="@Formato.Hhmm(_espelho.TotalFaltas)" Estado="@(_espelho.TotalFaltas > 0 ? "alerta" : null)" />
+        <Kpi Rotulo="Banco de horas" Valor="@Formato.Hhmm(_espelho.SaldoBancoHoras)" Detalhe="saldo até o fim do período" />
+    </div>
+
+    <div class="card mt">
+        <div class="card-cab">
+            <div>
+                <h2>@_espelho.Funcionario</h2>
+                <div class="small muted">CPF @_espelho.Cpf · @(_espelho.Cargo ?? "—") · admissão @_espelho.DataAdmissao?.ToString("dd/MM/yyyy") · @(_espelho.Jornada ?? "sem jornada")</div>
+            </div>
+            <div class="legenda">
+                <span><span class="chip">08:00</span> original</span>
+                <span><span class="chip incl">08:00</span> incluída</span>
+                <span><span class="chip pre">12:00</span> pré-assinalada</span>
+                <span><span class="chip desc">08:01</span> desconsiderada</span>
+            </div>
+        </div>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Dia</th><th>Contratual</th><th>Marcações</th><th class="num">Trab.</th><th class="num">Extras</th><th class="num">Atraso</th><th class="num">Falta</th><th>Ocorrência</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var d in _espelho.Dias)
+                    {
+                        <tr>
+                            <td class="nowrap"><b>@d.Data.ToString("dd/MM")</b> <span class="small muted">@Formato.DiaSemana(d.Data)</span></td>
+                            <td class="small">@(d.HorarioContratual ?? "folga")</td>
+                            <td>
+                                <div class="linha" style="gap:6px">
+                                    @foreach (var m in d.Marcacoes)
+                                    {
+                                        var classe = m.Desconsiderada ? "desc" : m.Fonte == "Incluída" ? "incl" : m.Fonte == "Pré-assinalada" ? "pre" : "";
+                                        <button class="chip @classe" style="border:none;cursor:@(_fechado ? "default" : "pointer")" title="@Titulo(m)" @onclick="() => AbrirMarcacao(m)">@m.DataHora.ToString("HH:mm")</button>
+                                    }
+                                </div>
+                            </td>
+                            <td class="num">@Formato.Hhmm(d.MinutosTrabalhados)</td>
+                            <td class="num" style="color:var(--azul)">@(d.MinutosExtras > 0 ? Formato.Hhmm(d.MinutosExtras) : "")</td>
+                            <td class="num" style="color:var(--vermelho)">@(d.MinutosAtraso > 0 ? Formato.Hhmm(d.MinutosAtraso) : "")</td>
+                            <td class="num" style="color:var(--vermelho)">@(d.MinutosFalta > 0 ? Formato.Hhmm(d.MinutosFalta) : "")</td>
+                            <td>
+                                @if (d.Inconsistente)
+                                {
+                                    <span class="badge b-amarelo">@d.Ocorrencia</span>
+                                }
+                                else if (d.Ocorrencia is not null)
+                                {
+                                    <span class="small">@d.Ocorrencia</span>
+                                }
+                            </td>
+                            <td class="right">
+                                @if (_rh && !_fechado)
+                                {
+                                    <button class="btn btn-fantasma btn-sm" title="Incluir marcação" @onclick="() => AbrirInclusao(d.Data)"><Icone Nome="mais" /></button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (_tratamentos.Count > 0)
+    {
+        <div class="card mt">
+            <div class="card-cab"><h2>Histórico de tratamentos</h2><span class="small muted">imutável — revogações ficam registradas</span></div>
+            <table class="tabela">
+                <thead><tr><th>Quando</th><th>Tipo</th><th>Marcação</th><th>Motivo</th><th>Responsável</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var t in _tratamentos)
+                    {
+                        var revogado = _tratamentos.Any(r => r.TratamentoRevogadoId == t.Id);
+                        <tr style="@(revogado ? "opacity:.55" : "")">
+                            <td class="nowrap small">@t.CriadoEm.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                            <td><span class="badge @(t.Tipo == TipoTratamento.Revogacao ? "b-cinza" : "b-azul")">@t.Tipo</span></td>
+                            <td class="nowrap">@(t.DataHora?.ToOffset(TimeSpan.FromMinutes(t.OffsetMinutos ?? -180)).ToString("dd/MM HH:mm") ?? (t.RegistroRepId is not null ? "original" : "—"))</td>
+                            <td>@t.Motivo</td>
+                            <td class="small">@t.UsuarioNome</td>
+                            <td class="right">
+                                @if (_rh && !_fechado && !revogado && t.Tipo != TipoTratamento.Revogacao)
+                                {
+                                    <button class="btn btn-perigo btn-sm" @onclick="() => AbrirRevogacao(t)">Revogar</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+<Modal @bind-Aberto="_modalInclusao" Titulo="Incluir marcação (tratamento)">
+    <ChildContent>
+        <div class="alerta info" style="margin-bottom:14px"><Icone Nome="info" /><div>Use somente para complementar omissões (ex.: esquecimento). A inclusão aparece no espelho e no AEJ como fonte "I", com o motivo.</div></div>
+        <div class="form-grade">
+            <div class="campo c-4"><label>Data</label><input type="date" @bind="_incData" /></div>
+            <div class="campo c-4"><label>Horário</label><input type="time" @bind="_incHora" /></div>
+            <div class="campo c-4">
+                <label>Tipo</label>
+                <select @bind="_incPre"><option value="false">Incluída</option><option value="true">Pré-assinalada (intervalo)</option></select>
+            </div>
+            <div class="campo c-12"><label>Motivo</label><input type="text" maxlength="150" @bind="_motivo" placeholder="Ex.: esquecimento da marcação de saída" /></div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalInclusao = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Incluir">Incluir</button>
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modalMarcacao" Titulo="Marcação">
+    <ChildContent>
+        @if (_selecionada is not null)
+        {
+            <div class="pilha" style="gap:8px">
+                <div class="linha entre"><span>Data e hora</span><b>@_selecionada.DataHora.ToString("dd/MM/yyyy HH:mm")</b></div>
+                <div class="linha entre"><span>Fonte</span><b>@_selecionada.Fonte</b></div>
+                @if (_selecionada.Nsr is not null)
+                {
+                    <div class="linha entre"><span>NSR</span><b class="mono">@_selecionada.Nsr?.ToString("000000000")</b></div>
+                }
+                @if (_selecionada.Motivo is not null)
+                {
+                    <div class="linha entre"><span>Motivo</span><span>@_selecionada.Motivo</span></div>
+                }
+                @if (_rh && !_fechado && _selecionada.Fonte == "Original" && !_selecionada.Desconsiderada)
+                {
+                    <div class="campo mt"><label>Desconsiderar esta marcação — motivo</label><input type="text" maxlength="150" @bind="_motivo" placeholder="Ex.: marcação em duplicidade" /></div>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalMarcacao = false">Fechar</button>
+        @if (_selecionada?.Nsr is not null && _registroSelecionado is not null)
+        {
+            <a class="btn btn-secundario" href="@($"/download/comprovante/{_registroSelecionado}")" target="_blank">Comprovante</a>
+        }
+        @if (_rh && !_fechado && _selecionada is { Fonte: "Original", Desconsiderada: false })
+        {
+            <button class="btn btn-perigo" disabled="@Ocupado" @onclick="Desconsiderar">Desconsiderar</button>
+        }
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modalRevogar" Titulo="Revogar tratamento">
+    <ChildContent>
+        <p>O tratamento continuará no histórico, marcado como revogado.</p>
+        <div class="campo"><label>Motivo da revogação</label><input type="text" maxlength="150" @bind="_motivo" /></div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalRevogar = false">Cancelar</button>
+        <button class="btn btn-perigo" disabled="@Ocupado" @onclick="Revogar">Revogar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    [SupplyParameterFromQuery(Name = "funcionario")] public Guid? FuncionarioQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "inicio")] public DateOnly? InicioQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "fim")] public DateOnly? FimQuery { get; set; }
+
+    private List<Funcionario> _funcionarios = [];
+    private Guid? _funcionarioId;
+    private DateOnly _inicio = InicioMes(Hoje);
+    private DateOnly _fim = Hoje;
+    private EspelhoDto? _espelho;
+    private List<Tratamento> _tratamentos = [];
+    private bool _fechado, _rh;
+
+    private bool _modalInclusao, _modalMarcacao, _modalRevogar;
+    private DateOnly _incData;
+    private TimeOnly _incHora = new(8, 0);
+    private bool _incPre;
+    private string _motivo = "";
+    private EspelhoMarcacaoDto? _selecionada;
+    private Guid? _registroSelecionado;
+    private Tratamento? _revogar;
+
+    protected override async Task CarregarAsync()
+    {
+        _rh = TemPapel(Roles.AdminEmpresa, Roles.RH);
+        _funcionarios = await Db.Funcionarios.AsNoTracking().OrderBy(f => f.Nome).ToListAsync();
+        _funcionarioId = FuncionarioQuery;
+        if (InicioQuery is { } i) _inicio = i;
+        if (FimQuery is { } f) _fim = f;
+        await Carregar();
+    }
+
+    private async Task Mes(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value + "-01", out var d))
+        {
+            _inicio = d;
+            var fim = d.AddMonths(1).AddDays(-1);
+            _fim = fim > Hoje ? Hoje : fim;
+            await Carregar();
+        }
+    }
+
+    private async Task Carregar()
+    {
+        if (_funcionarioId is null) { _espelho = null; return; }
+        await Executar(async () =>
+        {
+            _espelho = await Svc<EspelhoService>().GerarAsync(_funcionarioId.Value, _inicio, _fim, default);
+            var de = new DateTimeOffset(_inicio.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            _tratamentos = await Db.Tratamentos.AsNoTracking().Where(t => t.FuncionarioId == _funcionarioId && t.CriadoEm >= de.AddYears(-1))
+                .OrderByDescending(t => t.CriadoEm).Take(200).ToListAsync();
+            _fechado = await Db.Fechamentos.AnyAsync(f => f.FuncionarioId == _funcionarioId && f.Status == StatusFechamento.Fechado
+                                                          && f.Ano == _inicio.Year && f.Mes == _inicio.Month);
+        });
+    }
+
+    private static string Titulo(EspelhoMarcacaoDto m) => m.Fonte + (m.Nsr is { } n ? $" · NSR {n:000000000}" : "") + (m.Motivo is null ? "" : $" · {m.Motivo}");
+
+    private void AbrirInclusao(DateOnly d)
+    {
+        _incData = d;
+        _incHora = new TimeOnly(8, 0);
+        _incPre = false;
+        _motivo = "";
+        _modalInclusao = true;
+    }
+
+    private void AbrirMarcacao(EspelhoMarcacaoDto m)
+    {
+        _selecionada = m;
+        _registroSelecionado = m.RegistroId;
+        _motivo = "";
+        _modalMarcacao = true;
+    }
+
+    private void AbrirRevogacao(Tratamento t)
+    {
+        _revogar = t;
+        _motivo = "";
+        _modalRevogar = true;
+    }
+
+    private DateTimeOffset Instante(DateOnly d, TimeOnly h)
+    {
+        var fuso = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+        var local = d.ToDateTime(h);
+        return new DateTimeOffset(local, fuso.GetUtcOffset(local));
+    }
+
+    private async Task Incluir()
+    {
+        var ok = await Executar(async () =>
+        {
+            await Svc<FechamentoService>().GarantirAbertoAsync(_funcionarioId!.Value, _incData, default);
+            var t = Svc<TratamentoService>();
+            if (_incPre) await t.PreAssinalarAsync(_funcionarioId!.Value, Instante(_incData, _incHora), _motivo, default);
+            else await t.IncluirAsync(_funcionarioId!.Value, Instante(_incData, _incHora), _motivo, null, default);
+        }, "Marcação incluída.");
+        if (ok) { _modalInclusao = false; await Carregar(); }
+    }
+
+    private async Task Desconsiderar()
+    {
+        var ok = await Executar(async () =>
+        {
+            await Svc<FechamentoService>().GarantirAbertoAsync(_funcionarioId!.Value, DateOnly.FromDateTime(_selecionada!.DataHora.DateTime), default);
+            await Svc<TratamentoService>().DesconsiderarAsync(_registroSelecionado!.Value, _motivo, default);
+        }, "Marcação desconsiderada.");
+        if (ok) { _modalMarcacao = false; await Carregar(); }
+    }
+
+    private async Task Revogar()
+    {
+        var ok = await Executar(() => Svc<TratamentoService>().RevogarAsync(_revogar!.Id, _motivo, default), "Tratamento revogado.");
+        if (ok) { _modalRevogar = false; await Carregar(); }
+    }
+}

@@ -1,0 +1,316 @@
+@page "/funcionarios"
+@attribute [Authorize(Policy = Politicas.Empresa)]
+@inherits PaginaBase
+@using PersonaliPonto.Infrastructure.Seguranca
+@using PersonaliPonto.Modules.RH.Services
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Funcionários — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Cadastros" Titulo="Funcionários" Descricao="Cadastro dos trabalhadores do REP-P. Inclusões, alterações e desligamentos geram automaticamente os registros tipo 5 do AFD.">
+    <Acoes>
+        @if (_rh)
+        {
+            <button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo funcionário</button>
+        }
+    </Acoes>
+</Cabecalho>
+
+<div class="card">
+    <div class="card-cab">
+        <div class="filtros">
+            <div class="campo" style="min-width:260px"><label>Buscar</label><input type="search" placeholder="Nome, matrícula ou CPF" @bind="_busca" @bind:event="oninput" /></div>
+            <div class="campo">
+                <label>Local</label>
+                <select @bind="_filtroEst">
+                    <option value="">Todos</option>
+                    @foreach (var e in _estabelecimentos)
+                    {
+                        <option value="@e.Id">@e.Nome</option>
+                    }
+                </select>
+            </div>
+            <label class="checkbox"><input type="checkbox" @bind="_inativos" /> Mostrar inativos</label>
+        </div>
+        <span class="small muted">@Filtrados.Count() de @_lista.Count</span>
+    </div>
+    @if (_lista.Count == 0 && !Ocupado)
+    {
+        <Vazio Texto="Nenhum funcionário cadastrado ainda." Icone="pessoas" />
+    }
+    else
+    {
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Nome</th><th>Matrícula</th><th>CPF</th><th>Local</th><th>Jornada</th><th>Acesso</th><th>Situação</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var f in Filtrados)
+                    {
+                        <tr>
+                            <td><div style="font-weight:600">@f.Nome</div><div class="small muted">@f.Cargo</div></td>
+                            <td>@f.Matricula</td>
+                            <td class="nowrap">@Documentos.FormatarCpf(f.Cpf)</td>
+                            <td>@_estabelecimentos.FirstOrDefault(e => e.Id == f.EstabelecimentoId)?.Nome</td>
+                            <td>@(f.Jornada?.Codigo ?? "—")</td>
+                            <td>
+                                @if (f.PinHash is null)
+                                {
+                                    <span class="badge b-amarelo">sem PIN</span>
+                                }
+                                @if (_comAcesso.Contains(f.Id))
+                                {
+                                    <span class="badge b-azul">app</span>
+                                }
+                            </td>
+                            <td>
+                                @if (f.Ativo)
+                                {
+                                    <span class="badge b-verde">ativo</span>
+                                }
+                                else
+                                {
+                                    <span class="badge b-cinza">desligado</span>
+                                }
+                            </td>
+                            <td class="right nowrap">
+                                <a class="btn btn-fantasma btn-sm" href="@($"/espelho?funcionario={f.Id}")">Espelho</a>
+                                @if (_rh)
+                                {
+                                    <button class="btn btn-secundario btn-sm" @onclick="() => Editar(f)"><Icone Nome="editar" />Editar</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="@(_edit.Id == Guid.Empty ? "Novo funcionário" : "Editar funcionário")" Grande="true">
+    <ChildContent>
+        <div class="abas">
+            <button class="@(_aba == 0 ? "ativa" : "")" @onclick="() => _aba = 0">Dados</button>
+            @if (_edit.Id != Guid.Empty)
+            {
+                <button class="@(_aba == 1 ? "ativa" : "")" @onclick="() => _aba = 1">PIN e acesso</button>
+                <button class="@(_aba == 2 ? "ativa" : "")" @onclick="() => _aba = 2">Escala</button>
+            }
+        </div>
+        @if (_aba == 0)
+        {
+            <div class="form-grade">
+                <div class="campo c-8"><label>Nome completo</label><input type="text" @bind="_edit.Nome" maxlength="150" /></div>
+                <div class="campo c-4"><label>CPF</label><input type="text" @bind="_edit.Cpf" placeholder="000.000.000-00" /></div>
+                <div class="campo c-3"><label>Matrícula</label><input type="text" @bind="_edit.Matricula" maxlength="30" /></div>
+                <div class="campo c-3"><label>Matrícula eSocial</label><input type="text" @bind="_edit.MatriculaEsocial" maxlength="30" /></div>
+                <div class="campo c-3"><label>Admissão</label><input type="date" @bind="_edit.DataAdmissao" /></div>
+                <div class="campo c-3"><label>Desligamento</label><input type="date" @bind="_edit.DataDemissao" /></div>
+                <div class="campo c-6"><label>Cargo/função</label><input type="text" @bind="_edit.Cargo" /></div>
+                <div class="campo c-6"><label>E-mail</label><input type="email" @bind="_edit.Email" /></div>
+                <div class="campo c-6">
+                    <label>Local (estabelecimento)</label>
+                    <select @bind="_edit.EstabelecimentoId">
+                        @foreach (var e in _estabelecimentos)
+                        {
+                            <option value="@e.Id">@e.Nome</option>
+                        }
+                    </select>
+                </div>
+                <div class="campo c-6">
+                    <label>Jornada contratual</label>
+                    <select @bind="_edit.JornadaId">
+                        <option value="">— sem jornada —</option>
+                        @foreach (var j in _jornadas)
+                        {
+                            <option value="@j.Id">@j.Codigo — @j.Nome</option>
+                        }
+                    </select>
+                </div>
+                <div class="campo c-4">
+                    <label>Cerca virtual</label>
+                    <select @bind="_edit.ModoCercaFuncionario">
+                        <option value="">Padrão do local</option>
+                        <option value="@ModoCerca.Desativada">Desativada</option>
+                        <option value="@ModoCerca.Sinalizar">Sinalizar fora da cerca</option>
+                        <option value="@ModoCerca.Bloquear">Bloquear fora da cerca</option>
+                    </select>
+                </div>
+                <div class="c-8 linha" style="align-self:end;gap:18px">
+                    <label class="checkbox"><input type="checkbox" @bind="_edit.PermiteMarcacaoApp" /> Marca pelo aplicativo</label>
+                    <label class="checkbox"><input type="checkbox" @bind="_edit.PermiteMarcacaoOffline" /> Permite marcação off-line</label>
+                    <label class="checkbox"><input type="checkbox" @bind="_edit.Ativo" /> Ativo</label>
+                </div>
+            </div>
+        }
+        else if (_aba == 1)
+        {
+            <div class="pilha">
+                <div class="card suave card-corpo">
+                    <h3>PIN do terminal</h3>
+                    <p class="small">Usado com a matrícula ou CPF no terminal de ponto. Guardado apenas como hash; bloqueia após tentativas erradas.</p>
+                    <div class="linha">
+                        <input type="password" inputmode="numeric" maxlength="8" placeholder="4 a 8 dígitos" style="max-width:200px" @bind="_pin" />
+                        <button class="btn btn-primario" disabled="@Ocupado" @onclick="DefinirPin">Definir PIN</button>
+                    </div>
+                </div>
+                <div class="card suave card-corpo">
+                    <h3>Acesso ao aplicativo e à área do funcionário</h3>
+                    @if (_comAcesso.Contains(_edit.Id))
+                    {
+                        <p class="small">O funcionário já possui acesso. Para gerar nova senha temporária, use a tela de Usuários.</p>
+                    }
+                    else
+                    {
+                        <p class="small">Cria o login do funcionário (CPF ou e-mail) com senha temporária, trocada no primeiro acesso.</p>
+                        <button class="btn btn-marinho" disabled="@Ocupado" @onclick="CriarAcesso">Criar acesso</button>
+                    }
+                    @if (_acesso is not null)
+                    {
+                        <div class="alerta sucesso mt">
+                            <Icone Nome="chave" />
+                            <div>Login: <b>@_acesso.Login</b><br />Senha temporária: <b class="mono" style="font-size:14px">@_acesso.SenhaTemporaria</b><br /><span class="small">Anote agora: ela não será exibida novamente.</span></div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="pilha">
+                <p class="small">Troca a jornada a partir de uma data, preservando o histórico para a apuração dos períodos anteriores.</p>
+                <div class="form-grade">
+                    <div class="campo c-6">
+                        <label>Nova jornada</label>
+                        <select @bind="_novaJornada">
+                            @foreach (var j in _jornadas)
+                            {
+                                <option value="@j.Id">@j.Codigo — @j.Nome</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="campo c-3"><label>A partir de</label><input type="date" @bind="_inicioEscala" /></div>
+                    <div class="c-3" style="align-self:end"><button class="btn btn-primario btn-bloco" disabled="@Ocupado" @onclick="TrocarEscala">Aplicar</button></div>
+                </div>
+                @if (_escalas.Count > 0)
+                {
+                    <table class="tabela">
+                        <thead><tr><th>Jornada</th><th>Início</th><th>Fim</th></tr></thead>
+                        <tbody>
+                            @foreach (var e in _escalas)
+                            {
+                                <tr><td>@_jornadas.FirstOrDefault(j => j.Id == e.JornadaId)?.Nome</td><td>@e.Inicio.ToString("dd/MM/yyyy")</td><td>@(e.Fim?.ToString("dd/MM/yyyy") ?? "vigente")</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Fechar</button>
+        @if (_aba == 0)
+        {
+            <button class="btn btn-primario" disabled="@Ocupado" @onclick="Salvar">Salvar</button>
+        }
+    </Rodape>
+</Modal>
+
+@code {
+    private List<Funcionario> _lista = [];
+    private List<Estabelecimento> _estabelecimentos = [];
+    private List<Jornada> _jornadas = [];
+    private HashSet<Guid> _comAcesso = [];
+    private List<PersonaliPonto.Modules.RH.Domain.EscalaFuncionario> _escalas = [];
+    private string _busca = "";
+    private Guid? _filtroEst;
+    private bool _inativos;
+    private bool _modal;
+    private int _aba;
+    private Funcionario _edit = new();
+    private string _pin = "";
+    private AcessoCriado? _acesso;
+    private Guid _novaJornada;
+    private DateOnly _inicioEscala = Hoje;
+    private bool _rh;
+
+    private IEnumerable<Funcionario> Filtrados => _lista
+        .Where(f => _inativos || f.Ativo)
+        .Where(f => _filtroEst is null || f.EstabelecimentoId == _filtroEst)
+        .Where(f => string.IsNullOrWhiteSpace(_busca)
+                    || f.Nome.Contains(_busca, StringComparison.OrdinalIgnoreCase)
+                    || f.Matricula.Contains(_busca, StringComparison.OrdinalIgnoreCase)
+                    || f.Cpf.Contains(Documentos.SomenteDigitos(_busca) is { Length: > 0 } d ? d : "§"));
+
+    protected override async Task CarregarAsync()
+    {
+        _rh = TemPapel(Roles.AdminEmpresa, Roles.RH);
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().OrderBy(e => e.Nome).ToListAsync();
+        _jornadas = await Db.Jornadas.AsNoTracking().Where(j => j.Ativo).OrderBy(j => j.Codigo).ToListAsync();
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _lista = await Db.Funcionarios.AsNoTracking().Include(f => f.Jornada).OrderBy(f => f.Nome).ToListAsync();
+        _comAcesso = (await Db.Usuarios.AsNoTracking().Where(u => u.FuncionarioId != null && u.Ativo).Select(u => u.FuncionarioId!.Value).ToListAsync()).ToHashSet();
+    }
+
+    private void Novo()
+    {
+        if (_estabelecimentos.Count == 0)
+        {
+            Avisos.Erro("Cadastre primeiro um estabelecimento em Empresa e locais.");
+            return;
+        }
+        _edit = new Funcionario { EstabelecimentoId = _estabelecimentos[0].Id, DataAdmissao = Hoje, JornadaId = _jornadas.FirstOrDefault()?.Id };
+        _aba = 0;
+        _acesso = null;
+        _modal = true;
+    }
+
+    private async Task Editar(Funcionario f)
+    {
+        _edit = new Funcionario
+        {
+            Id = f.Id, TenantId = f.TenantId, Nome = f.Nome, Cpf = Documentos.FormatarCpf(f.Cpf), Matricula = f.Matricula, MatriculaEsocial = f.MatriculaEsocial,
+            DataAdmissao = f.DataAdmissao, DataDemissao = f.DataDemissao, Cargo = f.Cargo, Email = f.Email, EstabelecimentoId = f.EstabelecimentoId,
+            JornadaId = f.JornadaId, ModoCercaFuncionario = f.ModoCercaFuncionario, PermiteMarcacaoApp = f.PermiteMarcacaoApp,
+            PermiteMarcacaoOffline = f.PermiteMarcacaoOffline, Ativo = f.Ativo, PinHash = f.PinHash
+        };
+        _escalas = await Db.Escalas.AsNoTracking().Where(e => e.FuncionarioId == f.Id).OrderByDescending(e => e.Inicio).ToListAsync();
+        _novaJornada = _jornadas.FirstOrDefault()?.Id ?? Guid.Empty;
+        _aba = 0;
+        _acesso = null;
+        _pin = "";
+        _modal = true;
+    }
+
+    private Task Salvar() => Executar(async () =>
+    {
+        var salvo = await Svc<CadastroService>().SalvarFuncionarioAsync(_edit, default);
+        _edit.Id = salvo.Id;
+        await Recarregar();
+        _modal = false;
+    }, "Funcionário salvo.");
+
+    private Task DefinirPin() => Executar(async () =>
+    {
+        await Svc<CadastroService>().DefinirPinAsync(_edit.Id, _pin, default);
+        _pin = "";
+        await Recarregar();
+    }, "PIN definido.");
+
+    private Task CriarAcesso() => Executar(async () =>
+    {
+        _acesso = await Svc<UsuarioService>().CriarAcessoFuncionarioAsync(_edit.Id, default);
+        await Recarregar();
+    }, "Acesso criado.");
+
+    private Task TrocarEscala() => Executar(async () =>
+    {
+        await Svc<EscalaService>().AtribuirAsync(_edit.Id, _novaJornada, _inicioEscala, default);
+        _escalas = await Db.Escalas.AsNoTracking().Where(e => e.FuncionarioId == _edit.Id).OrderByDescending(e => e.Inicio).ToListAsync();
+        await Recarregar();
+    }, "Escala aplicada.");
+}

@@ -1,0 +1,130 @@
+@page "/marcacoes"
+@attribute [Authorize(Policy = Politicas.Empresa)]
+@inherits PaginaBase
+
+<PageTitle>Marcações — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Operação" Titulo="Marcações registradas" Descricao="Registros originais do REP-P (AFD tipo 7), imutáveis, com NSR, coletor, situação on-line/off-line e código hash SHA-256.">
+    <Acoes>
+        <a class="btn btn-secundario" href="@($"/download/relatorio/marcacoes?inicio={_inicio:yyyy-MM-dd}&fim={_fim:yyyy-MM-dd}")" target="_blank"><Icone Nome="download" />Exportar</a>
+    </Acoes>
+</Cabecalho>
+
+<div class="card">
+    <div class="card-cab">
+        <div class="filtros">
+            <div class="campo"><label>De</label><input type="date" @bind="_inicio" /></div>
+            <div class="campo"><label>Até</label><input type="date" @bind="_fim" /></div>
+            <div class="campo">
+                <label>Local</label>
+                <select @bind="_est">
+                    <option value="">Todos</option>
+                    @foreach (var e in _estabelecimentos)
+                    {
+                        <option value="@e.Id">@e.Nome</option>
+                    }
+                </select>
+            </div>
+            <div class="campo" style="min-width:220px"><label>Funcionário</label><input type="search" placeholder="Nome ou matrícula" @bind="_busca" /></div>
+            <label class="checkbox"><input type="checkbox" @bind="_soForaCerca" /> Só fora da cerca</label>
+            <button class="btn btn-primario" disabled="@Ocupado" @onclick="Buscar">Filtrar</button>
+        </div>
+        <span class="small muted">@_linhas.Count registros</span>
+    </div>
+    @if (_linhas.Count == 0)
+    {
+        <Vazio Texto="Nenhuma marcação no período." Icone="relogio" />
+    }
+    else
+    {
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>NSR</th><th>Data</th><th>Hora</th><th>Funcionário</th><th>Coletor</th><th>Situação</th><th>Hash</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var l in _linhas)
+                    {
+                        <tr>
+                            <td class="mono">@l.Nsr.ToString("000000000")</td>
+                            <td class="nowrap">@l.Local.ToString("dd/MM/yyyy") <span class="small muted">@Formato.DiaSemana(DateOnly.FromDateTime(l.Local.DateTime))</span></td>
+                            <td style="font-weight:700;font-variant-numeric:tabular-nums">@l.Local.ToString("HH:mm")</td>
+                            <td><div style="font-weight:600">@l.Nome</div><div class="small muted">mat. @l.Matricula · @l.Estabelecimento</div></td>
+                            <td>@Coletor(l.Coletor)</td>
+                            <td>
+                                @if (l.Offline)
+                                {
+                                    <span class="badge b-amarelo">off-line</span>
+                                }
+                                else
+                                {
+                                    <span class="badge b-verde">on-line</span>
+                                }
+                                @if (l.DentroCerca == false)
+                                {
+                                    <span class="badge b-vermelho">fora da cerca</span>
+                                }
+                            </td>
+                            <td class="mono small" title="@l.Hash">@l.Hash[..12]…</td>
+                            <td class="right nowrap">
+                                <a class="btn btn-fantasma btn-sm" href="@($"/download/comprovante/{l.Id}")" target="_blank">Comprovante</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_linhas.Count >= Limite)
+        {
+            <div class="alerta info" style="margin:12px"><Icone Nome="info" /><div>Exibindo as @Limite marcações mais recentes. Use o filtro ou exporte para ver todas.</div></div>
+        }
+    }
+</div>
+
+@code {
+    private const int Limite = 1000;
+    private sealed record Linha(Guid Id, long Nsr, DateTimeOffset Local, string Nome, string Matricula, string Estabelecimento, Coletor? Coletor, bool Offline, string Hash, bool? DentroCerca);
+
+    [SupplyParameterFromQuery] public bool? ForaCerca { get; set; }
+    private DateOnly _inicio = Hoje.AddDays(-6);
+    private DateOnly _fim = Hoje;
+    private Guid? _est;
+    private string _busca = "";
+    private bool _soForaCerca;
+    private List<Estabelecimento> _estabelecimentos = [];
+    private List<Linha> _linhas = [];
+
+    protected override async Task CarregarAsync()
+    {
+        _soForaCerca = ForaCerca == true;
+        _estabelecimentos = await Db.Estabelecimentos.AsNoTracking().OrderBy(e => e.Nome).ToListAsync();
+        await Buscar();
+    }
+
+    private static string Coletor(Coletor? c) => c switch
+    {
+        Shared.Contracts.Coletor.AplicativoMobile => "Aplicativo",
+        Shared.Contracts.Coletor.Browser => "Terminal/Web",
+        Shared.Contracts.Coletor.AplicativoDesktop => "Desktop",
+        Shared.Contracts.Coletor.DispositivoEletronico => "Dispositivo",
+        _ => "Outro"
+    };
+
+    private Task Buscar() => Executar(async () =>
+    {
+        var fuso = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+        var (de, ate) = ArquivosFiscaisService.Intervalo(_inicio, _fim, fuso);
+        var busca = _busca.Trim();
+        var q = from r in Db.RegistrosRep.AsNoTracking()
+                join f in Db.Funcionarios.AsNoTracking() on r.FuncionarioId equals f.Id
+                join e in Db.Estabelecimentos.AsNoTracking() on r.EstabelecimentoId equals e.Id
+                join c in Db.MarcacoesContexto.AsNoTracking() on r.Id equals c.RegistroRepId into cs
+                from c in cs.DefaultIfEmpty()
+                where r.Tipo == TipoRegistroRep.MarcacaoRepP && r.DataHoraMarcacao >= de && r.DataHoraMarcacao < ate
+                select new { r, f, e, Dentro = (bool?)c.DentroCerca };
+        if (_est is not null) q = q.Where(x => x.r.EstabelecimentoId == _est);
+        if (busca.Length > 0) q = q.Where(x => EF.Functions.ILike(x.f.Nome, $"%{busca}%") || x.f.Matricula == busca);
+        if (_soForaCerca) q = q.Where(x => x.Dentro == false);
+        var dados = await q.OrderByDescending(x => x.r.DataHoraMarcacao).Take(Limite).ToListAsync();
+        _linhas = dados.Select(x => new Linha(x.r.Id, x.r.Nsr, x.r.DataHoraMarcacao!.Value.ToOffset(TimeSpan.FromMinutes(x.r.OffsetMarcacaoMinutos ?? -180)),
+            x.f.Nome, x.f.Matricula, x.e.Nome, x.r.Coletor, x.r.Offline == true, x.r.Hash!, x.Dentro)).ToList();
+    });
+}

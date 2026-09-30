@@ -1,0 +1,58 @@
+@page "/auditoria"
+@attribute [Authorize(Policy = Politicas.Rh)]
+@inherits PaginaBase
+
+<PageTitle>Auditoria — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Conformidade" Titulo="Trilha de auditoria" Descricao="Toda ação sensível registra quem, quando e o quê. Os registros são imutáveis." />
+
+<div class="card">
+    <div class="card-cab">
+        <div class="filtros">
+            <div class="campo"><label>De</label><input type="date" @bind="_inicio" /></div>
+            <div class="campo"><label>Até</label><input type="date" @bind="_fim" /></div>
+            <div class="campo" style="min-width:220px"><label>Ação contém</label><input type="search" @bind="_acao" placeholder="ex.: tratamento, login" /></div>
+            <button class="btn btn-primario" disabled="@Ocupado" @onclick="Buscar">Filtrar</button>
+        </div>
+    </div>
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>Detalhes</th><th>IP</th></tr></thead>
+            <tbody>
+                @foreach (var l in _logs)
+                {
+                    <tr>
+                        <td class="nowrap small">@l.Em.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                        <td>@(l.UsuarioNome ?? "sistema")</td>
+                        <td><span class="badge b-azul sem-ponto">@l.Acao</span></td>
+                        <td class="small">@l.Entidade</td>
+                        <td class="mono small" style="max-width:420px">@l.Dados</td>
+                        <td class="small">@l.Ip</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (_logs.Count == 0)
+        {
+            <Vazio Texto="Nenhum registro no período." Icone="escudo" />
+        }
+    </div>
+</div>
+
+@code {
+    private DateOnly _inicio = Hoje.AddDays(-7);
+    private DateOnly _fim = Hoje;
+    private string _acao = "";
+    private List<AuditLog> _logs = [];
+
+    protected override Task CarregarAsync() => Buscar();
+
+    private Task Buscar() => Executar(async () =>
+    {
+        var de = new DateTimeOffset(_inicio.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(-3));
+        var ate = new DateTimeOffset(_fim.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(-3));
+        var q = Db.AuditLogs.AsNoTracking().Where(l => l.Em >= de && l.Em < ate);
+        if (!string.IsNullOrWhiteSpace(_acao)) q = q.Where(l => l.Acao.Contains(_acao.Trim()));
+        _logs = await q.OrderByDescending(l => l.Em).Take(500).ToListAsync();
+    });
+}

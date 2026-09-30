@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="PersonaliPonto.Mobile.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:p="clr-namespace:PersonaliPonto.Mobile.Paginas"
+    Shell.NavBarIsVisible="False"
+    Shell.TabBarBackgroundColor="White"
+    Shell.TabBarForegroundColor="{StaticResource Azul}"
+    Shell.TabBarTitleColor="{StaticResource Azul}"
+    Shell.TabBarUnselectedColor="{StaticResource Texto}"
+    Title="PersonaliPonto">
+
+    <TabBar>
+        <ShellContent Title="Menu" Route="menu" ContentTemplate="{DataTemplate p:MenuPage}">
+            <ShellContent.Icon>
+                <FontImageSource Glyph="&#x2630;" Size="20" />
+            </ShellContent.Icon>
+        </ShellContent>
+        <ShellContent Title="Início" Route="inicio" ContentTemplate="{DataTemplate p:InicioPage}">
+            <ShellContent.Icon>
+                <FontImageSource Glyph="&#x2302;" Size="22" />
+            </ShellContent.Icon>
+        </ShellContent>
+        <ShellContent Title="Espelho" Route="espelho" ContentTemplate="{DataTemplate p:EspelhoPage}">
+            <ShellContent.Icon>
+                <FontImageSource Glyph="&#x25F7;" Size="22" />
+            </ShellContent.Icon>
+        </ShellContent>
+    </TabBar>
+</Shell>

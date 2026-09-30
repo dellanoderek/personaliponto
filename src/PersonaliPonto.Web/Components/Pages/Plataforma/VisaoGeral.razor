@@ -1,0 +1,115 @@
+@page "/plataforma"
+@attribute [Authorize(Policy = Politicas.Plataforma)]
+@inherits PaginaPlataforma
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Plataforma — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Super Admin" Titulo="Visão geral da plataforma" Descricao="Clientes, receita recorrente, recebimentos da competência e uso do sistema de ponto.">
+    <Acoes>
+        @if (_dev)
+        {
+            <button class="btn btn-secundario" disabled="@Ocupado" @onclick="CriarDemo">Criar cliente de demonstração</button>
+        }
+        <a class="btn btn-secundario" href="/plataforma/faturamento">Faturamento</a>
+        <a class="btn btn-primario" href="/plataforma/clientes?novo=1"><Icone Nome="mais" />Novo cliente</a>
+    </Acoes>
+</Cabecalho>
+
+@if (_demo is not null)
+{
+    <div class="alerta info" style="margin-bottom:16px"><Icone Nome="info" /><div>@_demo</div></div>
+}
+@if (_ind is null)
+{
+    <Carregando />
+}
+else
+{
+    <div class="grade grade-5">
+        <Kpi Rotulo="Clientes ativos" Valor="@_ind.Ativos.ToString()" Detalhe="@($"{_ind.EmTeste} em teste")" />
+        <Kpi Rotulo="Inadimplentes" Valor="@_ind.Inadimplentes.ToString()" Estado="@(_ind.Inadimplentes > 0 ? "alerta" : null)" Detalhe="@($"{_ind.Suspensos} suspensos · {_ind.Cancelados} cancelados")" />
+        <Kpi Rotulo="Receita recorrente" Valor="@Formato.Moeda(_ind.ReceitaRecorrente)" Detalhe="@($"custo {Formato.Moeda(_ind.CustoRecorrente)}")" />
+        <Kpi Rotulo="Margem mensal" Valor="@Formato.Moeda(_ind.Margem)" Estado="ok" Detalhe="@(_ind.ReceitaRecorrente > 0 ? $"{100 * _ind.Margem / _ind.ReceitaRecorrente:0}% da receita" : "")" />
+        <Kpi Rotulo="Vencido (total)" Valor="@Formato.Moeda(_ind.VencidoTotal)" Estado="@(_ind.VencidoTotal > 0 ? "alerta" : null)" />
+    </div>
+
+    <div class="grade grade-3 mt">
+        <div class="card span-2">
+            <div class="card-cab"><h2>Faturado × recebido (12 meses)</h2></div>
+            <div class="card-corpo">
+                <GraficoBarras Pontos="_receita" Series="@(["Recebido", "Em aberto"])" Cores="@(["#1166d6", "#21b8ef"])" Formatar="v => Formato.Moeda((decimal)v)" Titulo="Receita" />
+            </div>
+        </div>
+        <div class="card marinho">
+            <div class="card-corpo">
+                <div class="small" style="color:var(--ciano);font-weight:700;letter-spacing:.1em">COMPETÊNCIA ATUAL</div>
+                <h2 style="margin:6px 0 18px">@DateTime.Today.ToString("MMMM 'de' yyyy")</h2>
+                <ul class="timeline">
+                    <li>@Formato.Moeda(_ind.FaturadoCompetencia)<span>faturado</span></li>
+                    <li>@Formato.Moeda(_ind.RecebidoCompetencia)<span>recebido</span></li>
+                    <li>@Formato.Moeda(_ind.PendenteCompetencia)<span>em aberto</span></li>
+                    <li>@_ind.FuncionariosCadastrados funcionários<span>@_ind.FuncionariosContratados contratados</span></li>
+                    <li>@_ind.MarcacoesHoje marcações hoje<span>todas as empresas</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt">
+        <div class="card-cab"><h2>Marcações por dia (30 dias)</h2></div>
+        <div class="card-corpo">
+            <GraficoBarras Pontos="_marcacoes" Series="@(["Marcações"])" Cores="@(["#21b8ef"])" Titulo="Marcações" />
+        </div>
+    </div>
+
+    @if (_inadimplentes.Count > 0)
+    {
+        <div class="card mt">
+            <div class="card-cab"><h2>Clientes com faturas vencidas</h2></div>
+            <table class="tabela">
+                <thead><tr><th>Cliente</th><th>Telefone</th><th>Situação</th><th class="num">Vencido</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in _inadimplentes)
+                    {
+                        <tr>
+                            <td style="font-weight:600">@c.RazaoSocial</td>
+                            <td>@c.Telefone</td>
+                            <td><StatusCliente Status="c.Status" /></td>
+                            <td class="num" style="color:var(--vermelho);font-weight:700">@Formato.Moeda(c.EmAberto)</td>
+                            <td class="right"><a class="btn btn-secundario btn-sm" href="@($"/plataforma/faturamento?busca={Uri.EscapeDataString(c.RazaoSocial)}")">Ver faturas</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private IndicadoresPlataforma? _ind;
+    private List<GraficoBarras.Ponto> _receita = [];
+    private List<GraficoBarras.Ponto> _marcacoes = [];
+    private List<LinhaGrade> _inadimplentes = [];
+
+    [Inject] private IWebHostEnvironment Env { get; set; } = default!;
+    private bool _dev;
+    private string? _demo;
+
+    private Task CriarDemo() => Executar(async () =>
+    {
+        _demo = await PersonaliPonto.Infrastructure.Hosting.DemoSeeder.CriarAsync(ScopedServices, default);
+        await CarregarAsync();
+    }, "Dados de demonstração criados.");
+
+    protected override async Task CarregarAsync()
+    {
+        _dev = Env.IsDevelopment();
+        var p = Svc<PainelPlataformaService>();
+        _ind = await p.IndicadoresAsync(default);
+        var br = new System.Globalization.CultureInfo("pt-BR");
+        _receita = _ind.ReceitaPorMes.Select(r => new GraficoBarras.Ponto(r.Competencia.ToString("MMM/yy", br), [(double)r.Recebido, (double)Math.Max(0, r.Faturado - r.Recebido)])).ToList();
+        _marcacoes = _ind.MarcacoesPorDia.Select(m => new GraficoBarras.Ponto(m.Dia.ToString("dd/MM"), [m.Quantidade])).ToList();
+        _inadimplentes = (await p.GradeAsync(Hoje.Year, null, null, default)).Where(g => g.EmAberto > 0).OrderByDescending(g => g.EmAberto).ToList();
+    }
+}

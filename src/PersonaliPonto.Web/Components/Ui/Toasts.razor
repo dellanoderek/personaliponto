@@ -1,0 +1,15 @@
+@implements IDisposable
+@inject Notificacoes Notificacoes
+
+<div class="toasts" aria-live="polite">
+    @foreach (var a in Notificacoes.Itens)
+    {
+        <div class="toast @a.Tipo" @onclick="() => Notificacoes.Remover(a.Id)">@a.Texto</div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => Notificacoes.Mudou += Atualizar;
+    private void Atualizar() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Notificacoes.Mudou -= Atualizar;
+}

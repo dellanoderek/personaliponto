@@ -49,7 +49,16 @@ else
                                     break;
                             }
                         </td>
-                        <td class="small">@(f.PagaEm?.ToString("dd/MM/yyyy") ?? "—")</td>
+                        <td class="small">
+                            @if (f.Status == StatusFatura.Aberta && f.GatewayStatus == StatusCobrancaGateway.Emitida && f.GatewayLink is { } link)
+                            {
+                                <a class="btn btn-sm btn-primario" href="@link" target="_blank" rel="noopener noreferrer">Pagar (Pix, boleto ou cartão)</a>
+                            }
+                            else
+                            {
+                                @(f.PagaEm?.ToString("dd/MM/yyyy") ?? "—")
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>

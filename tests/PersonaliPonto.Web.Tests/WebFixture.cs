@@ -21,12 +21,25 @@ public sealed partial class WebFixture : IAsyncLifetime
     private readonly string _banco = "tc_web_" + Guid.NewGuid().ToString("N")[..12];
     public WebApplicationFactory<Program> Factory { get; private set; } = null!;
     public const string SenhaTeste = "SenhaDeTeste2026";
+    public const string TokenWebhookOwner = "token-webhook-owner-web-0123456789abcdefghij";
     public const string EmailAdmin = "plataforma@teste.local";
     public const string EmailRh = "rh@empresa-teste.local";
     public string CpfFuncionario { get; private set; } = "";
     public Guid TenantId { get; private set; }
     public Guid EstabelecimentoId { get; private set; }
     public Guid FuncionarioId { get; private set; }
+
+    // Canal (E1): Revendedor "Tempo Certo Web" → Parceiro "Info Web"; cada um com um cliente.
+    public const string EmailRevendedor = "admin@revenda-teste.local";
+    public const string EmailParceiro = "admin@parceiro-teste.local";
+    public const string MarcaRevendedor = "Tempo Certo Web";
+    public const string MarcaParceiro = "Info Web";
+    public const string ClienteRevendedor = "CLIENTE DIRETO REVENDA LTDA";
+    public const string ClienteParceiro = "CLIENTE DO PARCEIRO LTDA";
+    public Guid RevendedorId { get; private set; }
+    public Guid ParceiroId { get; private set; }
+    public Guid TenantRevendedor { get; private set; }
+    public Guid TenantParceiro { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -48,6 +61,8 @@ public sealed partial class WebFixture : IAsyncLifetime
             b.UseSetting("Storage:DiretorioLocal", Path.Combine(Path.GetTempPath(), _banco));
             b.UseSetting("RepP:NumeroRegistroInpi", "BR512026000123-4");
             b.UseSetting("RepP:IdentificadorDesenvolvedor", "12ABC34501DE35");
+            b.UseSetting("Asaas:Owner:WebhookToken", TokenWebhookOwner);
+            b.UseSetting("Asaas:WebhookLimitePorMinuto", "30");
         });
         _ = Factory.Server; // inicializa (migrations + super admin)
 
@@ -87,6 +102,56 @@ public sealed partial class WebFixture : IAsyncLifetime
         uf.SenhaHash = SecretHasher.Hash(SenhaTeste);
         uf.DeveTrocarSenha = false;
         await db.SaveChangesAsync();
+
+        await CriarCanaisAsync();
+    }
+
+    private async Task CriarCanaisAsync()
+    {
+        static NovoCanalRequest Canal(string marca, string cnpj, string email) =>
+            new(marca + " LTDA", cnpj, marca, null, null, "Admin " + marca, email, null);
+        static NovoClienteRequest Cliente(string nome, string cnpj) =>
+            new(nome, cnpj, null, $"rh.{Guid.NewGuid():N}@cliente.local", "RH", null, 150, 5, 0, null, 10, null, "Rua B, 2", false);
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<RequestContext>().DefinirSistema();
+            RevendedorId = (await sp.GetRequiredService<CanalService>().CriarAsync(Canal(MarcaRevendedor, "11444777000161", EmailRevendedor), default)).CanalId;
+        }
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            await EntrarNoCanalAsync(sp, RevendedorId, Roles.AdminRevendedor);
+            ParceiroId = (await sp.GetRequiredService<CanalService>().CriarAsync(Canal(MarcaParceiro, "45723174000110", EmailParceiro), default)).CanalId;
+            TenantRevendedor = (await sp.GetRequiredService<ClienteService>().CadastrarAsync(Cliente(ClienteRevendedor, "04252011000110"), default)).TenantId;
+        }
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            await EntrarNoCanalAsync(sp, ParceiroId, Roles.AdminParceiro);
+            TenantParceiro = (await sp.GetRequiredService<ClienteService>().CadastrarAsync(Cliente(ClienteParceiro, "33000167000101"), default)).TenantId;
+        }
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<RequestContext>().DefinirSistema();
+            var db = sp.GetRequiredService<PersonaliPontoDbContext>();
+            foreach (var u in await db.Usuarios.Where(u => u.Email == EmailRevendedor || u.Email == EmailParceiro).ToListAsync())
+            {
+                u.SenhaHash = SecretHasher.Hash(SenhaTeste);
+                u.DeveTrocarSenha = false;
+            }
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task EntrarNoCanalAsync(IServiceProvider sp, Guid canalId, string papel)
+    {
+        var ctx = sp.GetRequiredService<RequestContext>();
+        ctx.DefinirUsuario(Guid.NewGuid(), "Admin canal", null, papel, null);
+        var carteira = await sp.GetRequiredService<ContextoCanalService>().CarteiraAsync(canalId, default);
+        ctx.DefinirCanal(canalId, carteira!.Canais, carteira.Tenants);
     }
 
     public async Task DisposeAsync()

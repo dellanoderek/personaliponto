@@ -69,51 +69,51 @@ public static class ContaEndpoints
             }
         }).RequireAuthorization();
 
-        // Acesso de suporte da plataforma a um cliente: sempre com motivo e sempre registrado.
-        app.MapPost("/plataforma/suporte/entrar", async ([FromForm] Guid tenantId, [FromForm] string motivo, HttpContext http,
-            PersonaliPontoDbContext db, RequestContext ctx, IClock clock, AuditService audit, CancellationToken ct) =>
-        {
-            if (string.IsNullOrWhiteSpace(motivo) || motivo.Trim().Length < 10)
-                return Results.LocalRedirect("/plataforma/clientes?erro=" + Uri.EscapeDataString("Informe o motivo do acesso (mínimo 10 caracteres)."));
-            ctx.DefinirSistema();
-            var t = await db.Tenants.AsNoTracking().FirstOrDefaultAsync(x => x.Id == tenantId, ct);
-            if (t is null) return Results.NotFound();
-            var acesso = new AcessoSuporte
-            {
-                TenantId = tenantId, UsuarioId = http.User.UsuarioId()!.Value, UsuarioNome = http.User.Identity!.Name ?? "",
-                Motivo = motivo.Trim(), Inicio = clock.UtcNow, Ip = http.Connection.RemoteIpAddress?.ToString()
-            };
-            db.AcessosSuporte.Add(acesso);
-            audit.Registrar("suporte.acesso_iniciado", nameof(Tenant), tenantId, new { motivo }, tenantId);
-            await db.SaveChangesAsync(ct);
+        // Modo suporte auditado (plataforma → cliente/canal; revendedor/parceiro → cliente da carteira).
+        // Sempre com motivo, registrado com horário e IP, e com checagem de descendência no SuporteService.
+        app.MapPost("/plataforma/suporte/entrar", ([FromForm] Guid tenantId, [FromForm] string motivo, HttpContext http, SuporteService suporte, CancellationToken ct) =>
+            EntrarSuporteAsync(http, () => suporte.IniciarClienteAsync(http.User, tenantId, motivo, ct), "/", "/plataforma/clientes"))
+            .RequireAuthorization(Politicas.Plataforma);
 
-            var claims = http.User.Claims.Where(c => c.Type is not (PersonaliPontoClaims.TenantId or ClaimTypes.Role)).ToList();
-            claims.Add(new Claim(ClaimTypes.Role, Roles.AdminEmpresa));
-            claims.Add(new Claim(ClaimTypes.Role, http.User.FindFirst(ClaimTypes.Role)!.Value));
-            claims.Add(new Claim(PersonaliPontoClaims.TenantId, tenantId.ToString()));
-            claims.Add(new Claim("suporte_acesso", acesso.Id.ToString()));
-            claims.Add(new Claim("suporte_cliente", t.Nome));
+        app.MapPost("/plataforma/suporte/canal/entrar", ([FromForm] Guid canalId, [FromForm] string motivo, HttpContext http, SuporteService suporte, CancellationToken ct) =>
+            EntrarSuporteAsync(http, () => suporte.IniciarCanalAsync(http.User, canalId, motivo, ct), "/canal", "/plataforma/revendedores"))
+            .RequireAuthorization(Politicas.Plataforma);
+
+        app.MapPost("/canal/suporte/entrar", ([FromForm] Guid tenantId, [FromForm] string motivo, HttpContext http, SuporteService suporte, CancellationToken ct) =>
+            EntrarSuporteAsync(http, () => suporte.IniciarClienteAsync(http.User, tenantId, motivo, ct), "/", "/canal/clientes"))
+            .RequireAuthorization(Politicas.Canal);
+
+        var sair = async (HttpContext http, SuporteService suporte, CancellationToken ct) =>
+        {
+            var (claims, papel) = await suporte.EncerrarAsync(http.User, ct);
             await EntrarAsync(http, claims);
-            return Results.LocalRedirect("/");
-        }).RequireAuthorization(Politicas.Plataforma);
+            return Results.LocalRedirect(Inicio(papel));
+        };
+        app.MapPost("/suporte/sair", sair).RequireAuthorization();
+        app.MapPost("/plataforma/suporte/sair", sair).RequireAuthorization();
+    }
 
-        app.MapPost("/plataforma/suporte/sair", async (HttpContext http, PersonaliPontoDbContext db, RequestContext ctx, IClock clock, CancellationToken ct) =>
+    private static async Task<IResult> EntrarSuporteAsync(HttpContext http, Func<Task<List<Claim>>> iniciar, string destino, string origem)
+    {
+        try
         {
-            ctx.DefinirSistema();
-            if (Guid.TryParse(http.User.FindFirst("suporte_acesso")?.Value, out var id))
-            {
-                var a = await db.AcessosSuporte.FirstOrDefaultAsync(x => x.Id == id, ct);
-                if (a is not null) { a.Fim = clock.UtcNow; await db.SaveChangesAsync(ct); }
-            }
-            var u = await db.Usuarios.AsNoTracking().FirstAsync(x => x.Id == http.User.UsuarioId(), ct);
-            await EntrarAsync(http, AuthService.Claims(u));
-            return Results.LocalRedirect("/plataforma");
-        }).RequireAuthorization();
+            await EntrarAsync(http, await iniciar());
+            return Results.LocalRedirect(destino);
+        }
+        catch (NaoEncontradoException)
+        {
+            return Results.NotFound();
+        }
+        catch (Exception ex) when (ex is RegraNegocioException or AcessoNegadoException or UnauthorizedAccessException)
+        {
+            return Results.LocalRedirect(origem + "?erro=" + Uri.EscapeDataString(Notificacoes.Mensagem(ex)));
+        }
     }
 
     public static string Inicio(string papel) => papel switch
     {
         Roles.SuperAdmin or Roles.Suporte => "/plataforma",
+        Roles.AdminRevendedor or Roles.SuporteRevendedor or Roles.AdminParceiro or Roles.SuporteParceiro => "/canal",
         Roles.Funcionario => "/meu-ponto",
         _ => "/"
     };
@@ -191,7 +191,7 @@ public static class DownloadEndpoints
             for (var i = 0; i < cab.Length; i++) ws.Cell(1, i + 1).Value = cab[i];
             for (var m = 0; m < 12; m++) ws.Cell(1, cab.Length + 1 + m).Value = new DateTime(ano, m + 1, 1).ToString("MMM/yy", new System.Globalization.CultureInfo("pt-BR"));
             ws.Cell(1, cab.Length + 13).Value = "Em aberto (vencido)";
-            ws.Row(1).Style.Font.SetBold().Font.SetFontColor(ClosedXML.Excel.XLColor.White).Fill.SetBackgroundColor(ClosedXML.Excel.XLColor.FromHtml("#082352"));
+            ws.Row(1).Style.Font.SetBold().Font.SetFontColor(ClosedXML.Excel.XLColor.White).Fill.SetBackgroundColor(ClosedXML.Excel.XLColor.FromHtml("#0b0b0d"));
             var l = 2;
             foreach (var r in grade)
             {

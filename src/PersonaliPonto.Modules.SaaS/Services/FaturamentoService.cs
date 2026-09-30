@@ -10,7 +10,7 @@ namespace PersonaliPonto.Modules.SaaS.Services;
 /// Faturamento mensal por competência e régua de inadimplência. Suspensão bloqueia apenas funcionalidades
 /// de uso (novas marcações, cadastros, tratamentos); espelhos, comprovantes, AFD e AEJ continuam acessíveis.
 /// </summary>
-public sealed class FaturamentoService(ISaasDbContext db, AuditService audit, IClock clock)
+public sealed class FaturamentoService(ISaasDbContext db, AuditService audit, IClock clock, ITenantContext ctx)
 {
     public DateOnly Hoje => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.UtcNow, Fuso).DateTime);
     private static readonly TimeZoneInfo Fuso = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
@@ -26,10 +26,12 @@ public sealed class FaturamentoService(ISaasDbContext db, AuditService audit, IC
             .Where(a => a.Inicio <= fimMes && (a.CanceladaEm == null || a.CanceladaEm >= competencia) && !emTeste.Contains(a.TenantId))
             .ToListAsync(ct);
         var existentes = await db.Faturas.Where(f => f.Competencia == competencia).Select(f => f.TenantId).ToListAsync(ct);
+        // Clientes públicos nunca geram cobrança automática (fatura manual/empenho).
+        var publicos = (await db.Tenants.AsNoTracking().Where(t => t.TipoEntidade == TipoEntidade.Publica).Select(t => t.Id).ToListAsync(ct)).ToHashSet();
         var novas = 0;
         foreach (var a in assinaturas.Where(a => !existentes.Contains(a.TenantId)))
         {
-            db.Faturas.Add(new Fatura
+            var fatura = new Fatura
             {
                 TenantId = a.TenantId,
                 Competencia = competencia,
@@ -37,7 +39,10 @@ public sealed class FaturamentoService(ISaasDbContext db, AuditService audit, IC
                 Vencimento = PrimeiroVencimento(a, competencia),
                 Status = a.ValorMensal <= 0 ? StatusFatura.NaoCobrada : StatusFatura.Aberta,
                 CriadaEm = clock.UtcNow
-            });
+            };
+            db.Faturas.Add(fatura);
+            // Fora do modo sistema (canal gerando a competência) o outbox não é gravável: a varredura da rotina enfileira depois.
+            if (!publicos.Contains(a.TenantId)) FilaCobrancaGateway.Enfileirar(db, fatura, clock, comMensagem: ctx.IsSystem);
             novas++;
         }
         if (novas > 0) audit.Registrar("faturamento.competencia_gerada", nameof(Fatura), competencia.ToString("yyyy-MM"), new { novas });
@@ -70,6 +75,37 @@ public sealed class FaturamentoService(ISaasDbContext db, AuditService audit, IC
         audit.Registrar("fatura.paga", nameof(Fatura), f.Id, new { f.Competencia, valorPago, pagaEm, forma }, f.TenantId);
         await db.SaveChangesAsync(ct);
         await AvaliarTenantAsync(f.TenantId, ct);
+    }
+
+    /// <summary>Baixa automática pelo webhook da conta Asaas do revendedor (modo sistema). Idempotente.</summary>
+    public async Task<bool> BaixarViaGatewayAsync(Guid faturaId, DateOnly pagaEm, decimal valorPago, string forma, string origem, CancellationToken ct)
+    {
+        var f = await db.Faturas.FirstOrDefaultAsync(x => x.Id == faturaId, ct) ?? throw new NaoEncontradoException("Fatura não encontrada.");
+        if (f.Status != StatusFatura.Aberta || valorPago <= 0) return false;
+        f.Status = StatusFatura.Paga;
+        f.PagaEm = pagaEm;
+        f.ValorPago = valorPago;
+        f.FormaPagamento = forma;
+        f.AtualizadaEm = clock.UtcNow;
+        audit.Registrar("fatura.paga_gateway", nameof(Fatura), f.Id, new { f.Competencia, valorPago, pagaEm, forma, origem }, f.TenantId);
+        await db.SaveChangesAsync(ct);
+        await AvaliarTenantAsync(f.TenantId, ct);
+        return true;
+    }
+
+    public async Task<bool> EstornarViaGatewayAsync(Guid faturaId, string motivo, string origem, CancellationToken ct)
+    {
+        var f = await db.Faturas.FirstOrDefaultAsync(x => x.Id == faturaId, ct) ?? throw new NaoEncontradoException("Fatura não encontrada.");
+        if (f.Status != StatusFatura.Paga) return false;
+        f.Status = StatusFatura.Aberta;
+        f.PagaEm = null;
+        f.ValorPago = null;
+        f.Observacao = motivo;
+        f.AtualizadaEm = clock.UtcNow;
+        audit.Registrar("fatura.estornada_gateway", nameof(Fatura), f.Id, new { f.Competencia, motivo, origem }, f.TenantId);
+        await db.SaveChangesAsync(ct);
+        await AvaliarTenantAsync(f.TenantId, ct);
+        return true;
     }
 
     public async Task MarcarNaoCobradaAsync(Guid faturaId, string motivo, CancellationToken ct)

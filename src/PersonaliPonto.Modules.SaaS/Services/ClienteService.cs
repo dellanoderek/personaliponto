@@ -24,15 +24,43 @@ public sealed record NovoClienteRequest(
     Guid? PlanoId,
     string LocalPrestacao,
     bool EmTeste,
-    int DiasTeste = 15);
+    int DiasTeste = 15,
+    Guid? CanalDonoId = null,
+    TipoEntidade TipoEntidade = TipoEntidade.Privada,
+    Guid? MunicipioId = null);
 
 public sealed record ClienteCriado(Guid TenantId, string? EmailAdmin, string? SenhaTemporaria);
 
 /// <summary>Gestão de clientes pelo Super Admin: cadastrar, ativar, suspender, cancelar e reativar.</summary>
-public sealed class ClienteService(ISaasDbContext db, RegistroRepService registros, AuditService audit, IClock clock)
+public sealed class ClienteService(ISaasDbContext db, RegistroRepService registros, AuditService audit, IClock clock,
+    ITenantContext contexto, IUnicidadeGlobal unicidade, ICurrentUser usuario)
 {
+    /// <summary>No painel de canal, apenas o administrador (revendedor/parceiro) altera cadastro e contrato.</summary>
+    private void ExigirGestor()
+    {
+        if (!contexto.IsSystem && contexto.CanalId is not null && usuario.Papel is not (Roles.AdminRevendedor or Roles.AdminParceiro))
+            throw new AcessoNegadoException("Apenas o administrador do canal pode alterar clientes.");
+    }
+
+    /// <summary>
+    /// Canal dono padrão: o informado (se visível), o canal do usuário ou, para a plataforma, o Owner raiz.
+    /// O filtro global de canais garante que um canal fora da hierarquia do usuário não seja encontrado.
+    /// </summary>
+    public async Task<Canal> CanalDonoAsync(Guid? canalDonoId, CancellationToken ct)
+    {
+        var id = canalDonoId ?? contexto.CanalId ?? (contexto.IsSystem ? Canal.OwnerRaizId : throw new AcessoNegadoException("Operação exige um canal."));
+        return await db.Canais.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct) ?? throw new NaoEncontradoException("Canal dono não encontrado.");
+    }
+
+    /// <summary>Fornecedor exibido por padrão: a marca do canal dono (ex.: "PERSONALIPONTO" para o Owner).</summary>
+    public static string FornecedorPadrao(Canal canal) => canal.NomeMarca.Trim().ToUpperInvariant();
+
+    /// <summary>Entra no tenant para gravar dados que não são da carteira do canal (empresa, administrador, REP).</summary>
+    private IDisposable? EntrarNoCliente(Guid tenantId) => contexto.IsSystem ? null : contexto.ComoTenant(tenantId);
+
     public async Task<ClienteCriado> CadastrarAsync(NovoClienteRequest r, CancellationToken ct)
     {
+        ExigirGestor();
         if (!Documentos.CnpjValido(r.Cnpj) && !Documentos.CpfValido(r.Cnpj)) throw new RegraNegocioException("CNPJ/CPF inválido.");
         if (string.IsNullOrWhiteSpace(r.RazaoSocial)) throw new RegraNegocioException("Razão social obrigatória.");
         var comAdmin = !string.IsNullOrWhiteSpace(r.EmailAdmin);
@@ -40,8 +68,11 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
         if (r.DiaVencimento is < 1 or > 28) throw new RegraNegocioException("Dia de vencimento entre 1 e 28.");
         var doc = Documentos.Normalizar(r.Cnpj);
         var email = comAdmin ? r.EmailAdmin.Trim().ToLowerInvariant() : null;
-        if (await db.Assinaturas.AnyAsync(a => a.Cnpj == doc && a.CanceladaEm == null, ct)) throw new RegraNegocioException("Já existe cliente ativo com este CNPJ.");
-        if (email is not null && await db.Usuarios.AnyAsync(u => u.Email == email, ct)) throw new RegraNegocioException("E-mail já utilizado por outro usuário.");
+        // Unicidade global (CNPJ ativo e e-mail de login), sem expor dados de outras carteiras.
+        if (await unicidade.CnpjClienteAtivoAsync(doc, ct)) throw new RegraNegocioException("Já existe cliente ativo com este CNPJ.");
+        if (email is not null && await unicidade.EmailEmUsoAsync(email, ct)) throw new RegraNegocioException("E-mail já utilizado por outro usuário.");
+        var canal = await CanalDonoAsync(r.CanalDonoId, ct);
+        if (r.MunicipioId is { } mun && !await db.Municipios.AnyAsync(m => m.Id == mun, ct)) throw new NaoEncontradoException("Município não encontrado.");
 
         var agora = clock.UtcNow;
         var hoje = DateOnly.FromDateTime(agora.UtcDateTime);
@@ -55,15 +86,20 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
             CriadoEm = agora,
             TesteAte = r.EmTeste ? agora.AddDays(r.DiasTeste) : null,
             EmailContato = email,
-            TelefoneContato = r.Telefone
+            TelefoneContato = r.Telefone,
+            CanalDonoId = canal.Id,
+            TipoEntidade = r.TipoEntidade,
+            MunicipioId = r.MunicipioId
         };
         db.Tenants.Add(tenant);
+        contexto.IncluirTenantCanal(tenant.Id, canal.Id);
+        using var _ = EntrarNoCliente(tenant.Id);
 
         db.Assinaturas.Add(new Assinatura
         {
             TenantId = tenant.Id, PlanoId = r.PlanoId, RazaoSocial = tenant.Nome, Cnpj = doc, Telefone = r.Telefone, Email = email,
             ValorMensal = r.ValorMensal, FuncionariosContratados = r.FuncionariosContratados, CustoMensal = r.CustoMensal,
-            Fornecedor = string.IsNullOrWhiteSpace(r.Fornecedor) ? "TEMPO CERTO" : r.Fornecedor.Trim().ToUpperInvariant(),
+            Fornecedor = string.IsNullOrWhiteSpace(r.Fornecedor) ? FornecedorPadrao(canal) : r.Fornecedor.Trim().ToUpperInvariant(),
             DiaVencimento = r.DiaVencimento, Inicio = hoje
         });
 
@@ -100,12 +136,14 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
     /// <summary>Cria (ou recria) o acesso do administrador da empresa. Devolve a senha temporária uma única vez.</summary>
     public async Task<string> CriarAdministradorAsync(Guid tenantId, string email, string nome, string? cpf, CancellationToken ct)
     {
+        ExigirGestor();
         email = email.Trim().ToLowerInvariant();
         if (!email.Contains('@')) throw new RegraNegocioException("E-mail inválido.");
         if (!await db.Tenants.AnyAsync(t => t.Id == tenantId, ct)) throw new NaoEncontradoException("Cliente não encontrado.");
         var senha = SenhaTemporaria();
-        var u = await db.Usuarios.FirstOrDefaultAsync(x => x.Email == email, ct);
-        if (u is not null && u.TenantId != tenantId) throw new RegraNegocioException("E-mail já utilizado por outro cliente.");
+        using var _ = EntrarNoCliente(tenantId);
+        var u = await db.Usuarios.FirstOrDefaultAsync(x => x.Email == email && x.TenantId == tenantId, ct);
+        if (u is null && await unicidade.EmailEmUsoAsync(email, ct)) throw new RegraNegocioException("E-mail já utilizado por outro cliente.");
         if (u is null)
         {
             u = new Usuario { TenantId = tenantId, Email = email, CriadoEm = clock.UtcNow, Papel = Roles.AdminEmpresa };
@@ -128,6 +166,7 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
 
     public async Task CancelarAsync(Guid tenantId, string motivo, CancellationToken ct)
     {
+        ExigirGestor();
         if (string.IsNullOrWhiteSpace(motivo)) throw new RegraNegocioException("Informe o motivo do cancelamento.");
         var a = await db.Assinaturas.FirstOrDefaultAsync(x => x.TenantId == tenantId, ct) ?? throw new NaoEncontradoException("Assinatura não encontrada.");
         a.CanceladaEm = DateOnly.FromDateTime(clock.UtcNow.UtcDateTime);
@@ -139,6 +178,7 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
 
     public async Task ReativarAsync(Guid tenantId, CancellationToken ct)
     {
+        ExigirGestor();
         var a = await db.Assinaturas.FirstOrDefaultAsync(x => x.TenantId == tenantId, ct) ?? throw new NaoEncontradoException("Assinatura não encontrada.");
         a.CanceladaEm = null;
         a.MotivoCancelamento = null;
@@ -148,6 +188,7 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
     public async Task AtualizarContratoAsync(Guid tenantId, decimal valor, int funcionarios, decimal custo, string? fornecedor, int diaVencimento,
         bool bloqueioAutomatico, int diasTolerancia, int diasParaBloqueio, string? telefone, string? observacoes, CancellationToken ct)
     {
+        ExigirGestor();
         if (diaVencimento is < 1 or > 28) throw new RegraNegocioException("Dia de vencimento entre 1 e 28.");
         if (diasParaBloqueio < diasTolerancia) throw new RegraNegocioException("O bloqueio deve ocorrer depois da inadimplência.");
         var a = await db.Assinaturas.FirstOrDefaultAsync(x => x.TenantId == tenantId, ct) ?? throw new NaoEncontradoException("Assinatura não encontrada.");
@@ -167,6 +208,7 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
 
     private async Task MudarStatus(Guid tenantId, TenantStatus status, string acao, string? motivo, CancellationToken ct)
     {
+        ExigirGestor();
         var t = await db.Tenants.FirstOrDefaultAsync(x => x.Id == tenantId, ct) ?? throw new NaoEncontradoException("Cliente não encontrado.");
         var anterior = t.Status;
         t.Status = status;
@@ -179,7 +221,7 @@ public sealed class ClienteService(ISaasDbContext db, RegistroRepService registr
         var baseSlug = Slug(nome);
         var slug = baseSlug;
         var i = 2;
-        while (await db.Tenants.AnyAsync(t => t.Slug == slug, ct)) slug = $"{baseSlug}-{i++}";
+        while (await unicidade.SlugTenantEmUsoAsync(slug, ct)) slug = $"{baseSlug}-{i++}";
         return slug;
     }
 

@@ -9,7 +9,17 @@ public static class Politicas
     public const string Rh = "rh";
     public const string Admin = "admin";
     public const string Plataforma = "plataforma";
+    /// <summary>Somente Super Admin do Owner (ex.: criar revendedores).</summary>
+    public const string PlataformaAdmin = "plataforma-admin";
     public const string Funcionario = "funcionario";
+    /// <summary>Qualquer usuário de canal (revendedor ou parceiro).</summary>
+    public const string Canal = "canal";
+    /// <summary>Administrador do canal (revendedor ou parceiro): gerencia usuários do canal.</summary>
+    public const string CanalAdmin = "canal-admin";
+    /// <summary>Usuários do revendedor (parceiros ficam de fora).</summary>
+    public const string Revendedor = "revendedor";
+    /// <summary>Administrador do revendedor: cria e gerencia parceiros.</summary>
+    public const string RevendedorAdmin = "revendedor-admin";
 }
 
 public sealed record Aviso(Guid Id, string Texto, string Tipo);
@@ -70,6 +80,10 @@ public static class Formato
         "RH" => "RH",
         "Gestor" => "Gestor",
         "Funcionario" => "Funcionário",
+        "AdminRevendedor" => "Administrador do revendedor",
+        "SuporteRevendedor" => "Suporte do revendedor",
+        "AdminParceiro" => "Administrador do parceiro",
+        "SuporteParceiro" => "Suporte do parceiro",
         _ => papel ?? ""
     };
 }

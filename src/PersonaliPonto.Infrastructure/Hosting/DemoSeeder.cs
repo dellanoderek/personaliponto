@@ -40,7 +40,7 @@ public static class DemoSeeder
         var email = $"rh+{cnpj[..6]}@demo.test";
         var cliente = await sp.GetRequiredService<ClienteService>().CadastrarAsync(new NovoClienteRequest(
             "EMPRESA DEMONSTRAÇÃO LTDA", cnpj, "83 90000-0000", email, "RH Demonstração", null, 249.90m, 50, 60.60m,
-            "TEMPO CERTO", 10, null, "Av. Floriano Peixoto, 1000 - Centro, Campina Grande/PB", false), ct);
+            "PERSONALIPONTO", 10, null, "Av. Floriano Peixoto, 1000 - Centro, Campina Grande/PB", false), ct);
 
         ctx.DefinirTenant(cliente.TenantId);
         var cad = sp.GetRequiredService<CadastroService>();

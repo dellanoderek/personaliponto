@@ -1,0 +1,30 @@
+@inherits PaginaBase
+@using PersonaliPonto.Modules.SaaS.Domain
+@* Banner da régua de canal (E2) exibido em todas as páginas do painel do canal. *@
+@switch (_status)
+{
+    case StatusCanal.Aviso:
+        <div class="alerta aviso" style="border-radius:0">
+            <Icone Nome="alerta" />
+            <div style="flex:1">Há fatura da sua conta PersonaliPonto em atraso. Regularize para evitar o bloqueio do painel. A marcação de ponto dos seus clientes nunca é bloqueada.</div>
+            <a class="btn btn-sm btn-secundario" href="/canal/minha-conta">Ver faturas</a>
+        </div>
+        break;
+    case StatusCanal.PainelBloqueado:
+    case StatusCanal.Suspenso:
+        <div class="alerta erro" style="border-radius:0">
+            <Icone Nome="cadeado" />
+            <div style="flex:1">Painel @(_status == StatusCanal.Suspenso ? "suspenso" : "bloqueado") por pendência financeira: consulta apenas de pendências e faturas, sem cadastros ou alterações. Seus clientes continuam marcando ponto e acessando comprovantes, espelho, AFD e AEJ normalmente.</div>
+            <a class="btn btn-sm btn-secundario" href="/canal/minha-conta">Ver faturas</a>
+        </div>
+        break;
+}
+
+@code {
+    private StatusCanal? _status;
+
+    protected override async Task CarregarAsync()
+    {
+        if (CanalId is { } id) _status = (await Svc<Modules.SaaS.Services.CanalService>().ObterAsync(id, default))?.Status;
+    }
+}

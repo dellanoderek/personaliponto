@@ -1,0 +1,243 @@
+@page "/canal/parceiros"
+@attribute [Authorize(Policy = Politicas.Revendedor)]
+@inherits PaginaCanal
+@using PersonaliPonto.Modules.SaaS.Domain
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Parceiros — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Revendedor" Titulo="Parceiros" Descricao="Parceiros vendem e atendem a própria carteira sob a sua marca. Eles veem cadastro e financeiro dos próprios clientes — nunca os seus clientes diretos nem os de outros parceiros.">
+    <Acoes>
+        @if (EhAdminCanal)
+        {
+            <button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo parceiro</button>
+        }
+    </Acoes>
+</Cabecalho>
+
+@if (_criado is not null)
+{
+    <div class="alerta sucesso" style="margin-bottom:16px"><Icone Nome="chave" /><div>Acesso do administrador do parceiro: <b>@_criado.EmailAdmin</b> · senha temporária <b class="mono" style="font-size:14px">@_criado.SenhaTemporaria</b> — ela não será exibida novamente.</div></div>
+}
+
+<div class="card">
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead><tr><th>Parceiro</th><th>Situação</th><th class="num">Clientes</th><th class="num">Ativos</th><th class="num">Receita mensal</th><th class="num">Preço/func.</th><th>Desde</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var p in _lista)
+                {
+                    <tr>
+                        <td><div style="font-weight:600">@p.NomeMarca</div><div class="small muted">@p.RazaoSocial · @Documentos.FormatarCnpj(p.Cnpj)</div></td>
+                        <td><SituacaoCanal Status="p.Status" /></td>
+                        <td class="num">@p.Clientes</td>
+                        <td class="num">@p.ClientesAtivos</td>
+                        <td class="num">@Formato.Moeda(p.ReceitaMensal)</td>
+                        <td class="num small">@PrecoTexto(p.Id)</td>
+                        <td class="small">@p.CriadoEm.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                        <td class="right">
+                            @if (EhAdminCanal)
+                            {
+                                <button class="btn btn-sm btn-secundario" @onclick="() => EditarPreco(p.Id)">Preço</button>
+                                <select class="btn-sm" value="@p.Status" @onchange="e => AlterarStatus(p.Id, e.Value?.ToString())">
+                                    @foreach (var s in Enum.GetValues<StatusCanal>())
+                                    {
+                                        <option value="@s">@s</option>
+                                    }
+                                </select>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_lista.Count == 0)
+    {
+        <Vazio Texto="Nenhum parceiro cadastrado." Icone="pessoas" />
+    }
+</div>
+
+<div class="card mt">
+    <div class="card-cab"><h2>Faturas dos parceiros</h2><span class="small muted">Geradas no início do mês pela apuração de funcionários ativos · baixa manual</span></div>
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead><tr><th>Competência</th><th>Parceiro</th><th>Vencimento</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var f in _faturas)
+                {
+                    <tr class="clicavel" @onclick="() => AbrirFatura(f)">
+                        <td>@f.Competencia.ToString("MM/yyyy")</td>
+                        <td>@(_lista.FirstOrDefault(p => p.Id == f.CanalPagadorId)?.NomeMarca)</td>
+                        <td>@f.Vencimento.ToString("dd/MM/yyyy")</td>
+                        <td class="num">@Formato.Moeda(f.Valor)</td>
+                        <td><SituacaoFaturaCanal Fatura="f" /></td>
+                        <td class="right"><button class="btn btn-sm btn-secundario">Detalhes</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_faturas.Count == 0)
+    {
+        <Vazio Texto="Nenhuma fatura de parceiro. Defina o preço por funcionário para cobrar os parceiros a partir do mês seguinte à entrada." Icone="cartao" />
+    }
+</div>
+
+<Modal @bind-Aberto="_modalPreco" Titulo="@($"Preço do parceiro {_lista.FirstOrDefault(p => p.Id == _precoParceiro)?.NomeMarca}")">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-6"><label>Preço por funcionário ativo (R$)</label><input type="number" step="0.01" min="0" @bind="_preco" /></div>
+            <div class="campo c-6"><label>Mínimo mensal (opcional)</label><input type="number" step="0.01" min="0" @bind="_minimo" /></div>
+            <div class="campo c-12"><label>Isentar quando tiver ao menos N clientes públicos ativos (opcional)</label><input type="number" min="1" @bind="_isencao" /></div>
+            <p class="c-12 small muted">Deixe o preço vazio para não cobrar este parceiro. A fatura agrupa os funcionários ativos (≥ 1 marcação no mês) dos clientes do parceiro.</p>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalPreco = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="SalvarPreco">Salvar</button>
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modalFatura" Titulo="@($"Fatura {_fatura?.Competencia:MM/yyyy}")">
+    <ChildContent>
+        @if (_fatura is not null)
+        {
+            <DetalheFaturaCanal Fatura="_fatura" />
+            @if (_fatura.Status == StatusFatura.Aberta && TemPapel(Roles.AdminRevendedor))
+            {
+                <div class="form-grade mt">
+                    <div class="campo c-6"><label>Data do pagamento</label><input type="date" @bind="_pagoEm" /></div>
+                    <div class="campo c-6"><label>Valor pago</label><input type="number" step="0.01" @bind="_valorPago" /></div>
+                </div>
+            }
+        }
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalFatura = false">Fechar</button>
+        @if (TemPapel(Roles.AdminRevendedor))
+        {
+            @if (_fatura?.Status == StatusFatura.Aberta)
+            {
+                <button class="btn btn-secundario" disabled="@Ocupado" @onclick="IsentarFatura">Não cobrar</button>
+                <button class="btn btn-sucesso" disabled="@Ocupado" @onclick="PagarFatura">Registrar pagamento</button>
+            }
+            else if (_fatura?.Status is StatusFatura.Paga or StatusFatura.NaoCobrada)
+            {
+                <button class="btn btn-perigo" disabled="@Ocupado" @onclick="EstornarFatura">Estornar</button>
+            }
+        }
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modal" Titulo="Novo parceiro" Grande="true">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-8"><label>Razão social</label><input type="text" @bind="_novo.RazaoSocial" /></div>
+            <div class="campo c-4"><label>CNPJ/CPF</label><input type="text" @bind="_novo.Cnpj" /></div>
+            <div class="campo c-6"><label>Nome da marca</label><input type="text" maxlength="80" @bind="_novo.NomeMarca" /></div>
+            <div class="campo c-6"><label>Telefone</label><input type="tel" @bind="_novo.Telefone" /></div>
+            <div class="c-12"><h3 class="mt">Administrador do parceiro</h3></div>
+            <div class="campo c-5"><label>Nome</label><input type="text" @bind="_novo.NomeAdmin" /></div>
+            <div class="campo c-4"><label>E-mail</label><input type="email" @bind="_novo.EmailAdmin" /></div>
+            <div class="campo c-3"><label>CPF</label><input type="text" @bind="_novo.CpfAdmin" /></div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Criar">Cadastrar parceiro</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private List<LinhaCanal> _lista = [];
+    private bool _modal;
+    private FormCanal _novo = new();
+    private CanalCriado? _criado;
+
+    public sealed class FormCanal
+    {
+        public string RazaoSocial { get; set; } = "";
+        public string Cnpj { get; set; } = "";
+        public string NomeMarca { get; set; } = "";
+        public string? Telefone { get; set; }
+        public string NomeAdmin { get; set; } = "";
+        public string EmailAdmin { get; set; } = "";
+        public string? CpfAdmin { get; set; }
+
+        public NovoCanalRequest Request() => new(RazaoSocial, Cnpj, NomeMarca, null, Telefone, NomeAdmin, EmailAdmin, CpfAdmin);
+    }
+
+    private Dictionary<Guid, Canal> _canais = [];
+    private List<FaturaCanal> _faturas = [];
+    private bool _modalPreco, _modalFatura;
+    private Guid _precoParceiro;
+    private decimal? _preco, _minimo;
+    private int? _isencao;
+    private FaturaCanal? _fatura;
+    private DateOnly _pagoEm = Hoje;
+    private decimal _valorPago;
+
+    protected override async Task CarregarAsync()
+    {
+        _lista = (await Svc<CanalService>().ListarFilhosAsync(null, default)).ToList();
+        var ids = _lista.Select(p => p.Id).ToList();
+        _canais = await Db.Canais.AsNoTracking().Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+        if (CanalId is { } id) _faturas = await Svc<FaturamentoCanalService>().FaturasRecebidasPorAsync(id, default);
+    }
+
+    private string PrecoTexto(Guid id) => _canais.TryGetValue(id, out var c) && c.PrecoFuncionarioParceiro is { } p
+        ? Formato.Moeda(p) + (c.MinimoMensalParceiro is { } m ? $" (mín. {Formato.Moeda(m)})" : "") + (c.IsencaoMinClientesPublicos is { } n ? $" · isento ≥{n} públicos" : "")
+        : "não cobrado";
+
+    private void EditarPreco(Guid id)
+    {
+        _precoParceiro = id;
+        var c = _canais.GetValueOrDefault(id);
+        (_preco, _minimo, _isencao) = (c?.PrecoFuncionarioParceiro, c?.MinimoMensalParceiro, c?.IsencaoMinClientesPublicos);
+        _modalPreco = true;
+    }
+
+    private async Task SalvarPreco()
+    {
+        if (await Executar(() => Svc<FaturamentoCanalService>().DefinirPrecoParceiroAsync(_precoParceiro, _preco, _minimo, _isencao, default), "Preço do parceiro salvo."))
+        {
+            _modalPreco = false;
+            await CarregarAsync();
+        }
+    }
+
+    private void AbrirFatura(FaturaCanal f)
+    {
+        _fatura = f;
+        _pagoEm = Hoje;
+        _valorPago = f.Valor;
+        _modalFatura = true;
+    }
+
+    private async Task AposFatura(Func<Task> acao, string msg)
+    {
+        if (await Executar(acao, msg)) { _modalFatura = false; await CarregarAsync(); }
+    }
+
+    private Task PagarFatura() => AposFatura(() => Svc<FaturamentoCanalService>().RegistrarPagamentoAsync(_fatura!.Id, _pagoEm, _valorPago, "Manual", null, default), "Pagamento registrado.");
+    private Task IsentarFatura() => AposFatura(() => Svc<FaturamentoCanalService>().MarcarNaoCobradaAsync(_fatura!.Id, "Isenção concedida pelo revendedor", default), "Fatura isenta.");
+    private Task EstornarFatura() => AposFatura(() => Svc<FaturamentoCanalService>().EstornarAsync(_fatura!.Id, "Estornada pelo revendedor", default), "Fatura reaberta.");
+
+    private void Novo() { _novo = new FormCanal(); _modal = true; }
+
+    private async Task Criar()
+    {
+        if (await Executar(async () => _criado = await Svc<CanalService>().CriarAsync(_novo.Request(), default), "Parceiro cadastrado."))
+        {
+            _modal = false;
+            await CarregarAsync();
+        }
+    }
+
+    private async Task AlterarStatus(Guid id, string? valor)
+    {
+        if (!Enum.TryParse<StatusCanal>(valor, out var s)) return;
+        if (await Executar(() => Svc<CanalService>().AlterarStatusAsync(id, s, default), "Situação do parceiro atualizada.")) await CarregarAsync();
+    }
+}

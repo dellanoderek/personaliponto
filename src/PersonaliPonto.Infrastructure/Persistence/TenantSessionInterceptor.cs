@@ -23,27 +23,35 @@ public sealed class TenantSessionInterceptor(string? papelAplicacao) : DbCommand
 
     private static readonly ConditionalWeakTable<DbConnection, Estado> Estados = new();
 
-    private static (string TenantId, string Bypass) Valores(DbContext? ctx)
+    private static (string TenantId, string Bypass, string Canal, string Canais, string Tenants) Valores(DbContext? ctx)
     {
         var t = (ctx as PersonaliPontoDbContext)?.TenantContext;
-        if (t is null) return ("", "off");
-        return (t.TenantId?.ToString() ?? "", t.IsSystem ? "on" : "off");
+        if (t is null) return ("", "off", "", "", "");
+        return (t.TenantId?.ToString() ?? "", t.IsSystem ? "on" : "off", t.CanalId?.ToString() ?? "",
+            ArrayPg(t.CanaisVisiveis), ArrayPg(t.TenantsCanal));
     }
+
+    /// <summary>Literal de array uuid do PostgreSQL ("{a,b}"); vazio quando não há itens.</summary>
+    private static string ArrayPg(IReadOnlyList<Guid> ids) => ids.Count == 0 ? "" : "{" + string.Join(',', ids) + "}";
 
     private async Task AplicarAsync(DbConnection conn, DbContext? ctx, DbTransaction? tx, CancellationToken ct)
     {
-        var (tenant, bypass) = Valores(ctx);
+        var (tenant, bypass, canal, canais, tenants) = Valores(ctx);
         var migracao = (ctx as PersonaliPontoDbContext)?.TenantContext is Tenancy.RequestContext { Migracao: true };
-        var chave = tenant + "|" + bypass + "|" + migracao;
+        var chave = string.Join('|', tenant, bypass, canal, canais, tenants, migracao);
         var estado = Estados.GetOrCreateValue(conn);
         if (estado.Chave == chave) return;
 
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         var role = migracao ? "RESET ROLE; " : string.IsNullOrWhiteSpace(papelAplicacao) ? "" : $"SET ROLE {papelAplicacao}; ";
-        cmd.CommandText = role + "SELECT set_config('app.tenant_id', @t, false), set_config('app.bypass_rls', @b, false);";
+        cmd.CommandText = role + "SELECT set_config('app.tenant_id', @t, false), set_config('app.bypass_rls', @b, false), "
+            + "set_config('app.canal_id', @c, false), set_config('app.canais_canal', @cs, false), set_config('app.tenants_canal', @ts, false);";
         cmd.Parameters.Add(new NpgsqlParameter("t", tenant));
         cmd.Parameters.Add(new NpgsqlParameter("b", bypass));
+        cmd.Parameters.Add(new NpgsqlParameter("c", canal));
+        cmd.Parameters.Add(new NpgsqlParameter("cs", canais));
+        cmd.Parameters.Add(new NpgsqlParameter("ts", tenants));
         await cmd.ExecuteNonQueryAsync(ct);
         estado.Chave = chave;
     }

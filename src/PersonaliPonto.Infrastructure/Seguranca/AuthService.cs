@@ -94,9 +94,11 @@ public sealed class AuthService(PersonaliPontoDbContext db, RequestContext ctx, 
             new(ClaimTypes.NameIdentifier, u.Id.ToString()),
             new(ClaimTypes.Name, u.Nome),
             new(ClaimTypes.Email, u.Email),
-            new(ClaimTypes.Role, u.Papel)
+            new(ClaimTypes.Role, u.Papel),
+            new(PersonaliPontoClaims.Escopo, u.Escopo.ToString())
         };
         if (u.TenantId is { } t) c.Add(new Claim(PersonaliPontoClaims.TenantId, t.ToString()));
+        if (u.CanalId is { } canal) c.Add(new Claim(PersonaliPontoClaims.CanalId, canal.ToString()));
         if (u.FuncionarioId is { } f) c.Add(new Claim(PersonaliPontoClaims.FuncionarioId, f.ToString()));
         if (!string.IsNullOrEmpty(u.Cpf)) c.Add(new Claim("cpf", u.Cpf));
         if (u.DeveTrocarSenha) c.Add(new Claim("trocar_senha", "1"));

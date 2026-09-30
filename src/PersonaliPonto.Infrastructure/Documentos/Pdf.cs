@@ -5,16 +5,16 @@ using PdfSharp.Pdf;
 
 namespace PersonaliPonto.Infrastructure.Documentos;
 
-/// <summary>Paleta institucional extraída da apresentação comercial PersonaliPonto.</summary>
+/// <summary>Paleta PersonaliPonto preto + dourado (tema neutro azul em docs/marca/tema-neutro-azul.md).</summary>
 public static class Marca
 {
-    public static readonly XColor Marinho = XColor.FromArgb(0x08, 0x23, 0x52);
-    public static readonly XColor Azul = XColor.FromArgb(0x11, 0x66, 0xD6);
-    public static readonly XColor Ciano = XColor.FromArgb(0x21, 0xB8, 0xEF);
-    public static readonly XColor Texto = XColor.FromArgb(0x59, 0x70, 0x8E);
-    public static readonly XColor Fundo = XColor.FromArgb(0xF4, 0xF8, 0xFB);
-    public static readonly XColor FundoAzul = XColor.FromArgb(0xE6, 0xF4, 0xFD);
-    public static readonly XColor Borda = XColor.FromArgb(0xDB, 0xE6, 0xF0);
+    public static readonly XColor Marinho = XColor.FromArgb(0x0B, 0x0B, 0x0D); // preto
+    public static readonly XColor Azul = XColor.FromArgb(0x7A, 0x5C, 0x1E); // dourado texto (AA)
+    public static readonly XColor Ciano = XColor.FromArgb(0xC9, 0xA5, 0x4C); // dourado
+    public static readonly XColor Texto = XColor.FromArgb(0x6B, 0x6B, 0x73);
+    public static readonly XColor Fundo = XColor.FromArgb(0xFA, 0xF8, 0xF3);
+    public static readonly XColor FundoAzul = XColor.FromArgb(0xF6, 0xEF, 0xDC);
+    public static readonly XColor Borda = XColor.FromArgb(0xE8, 0xE2, 0xD4);
     public static readonly XColor Vermelho = XColor.FromArgb(0xC0, 0x39, 0x2B);
 }
 

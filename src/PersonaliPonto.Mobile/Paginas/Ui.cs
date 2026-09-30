@@ -3,23 +3,26 @@ using PersonaliPonto.Mobile.Servicos;
 
 namespace PersonaliPonto.Mobile.Paginas;
 
-/// <summary>Kit de componentes visuais do app (paleta e formas da apresentação PersonaliPonto).</summary>
+/// <summary>Kit de componentes visuais do app (paleta PersonaliPonto preto + dourado; tema neutro azul em docs/marca/tema-neutro-azul.md).</summary>
 public static class Ui
 {
-    public static readonly Color Marinho = Color.FromArgb("#082352");
-    public static readonly Color Azul = Color.FromArgb("#1166D6");
-    public static readonly Color Ciano = Color.FromArgb("#21B8EF");
-    public static readonly Color Texto = Color.FromArgb("#59708E");
-    public static readonly Color Titulo = Color.FromArgb("#082452");
-    public static readonly Color Fundo = Color.FromArgb("#F4F8FB");
-    public static readonly Color FundoAzul = Color.FromArgb("#E6F4FD");
-    public static readonly Color Borda = Color.FromArgb("#DBE6F0");
+    public static readonly Color Marinho = Color.FromArgb("#0B0B0D");   // preto
+    public static readonly Color Grafite = Color.FromArgb("#1A1A1F");
+    public static readonly Color Ouro = Color.FromArgb("#C9A54C");
+    public static readonly Color OuroClaro = Color.FromArgb("#E6C77A");
+    public static readonly Color Azul = Color.FromArgb("#7A5C1E");      // dourado para texto em fundo claro (AA)
+    public static readonly Color Ciano = Color.FromArgb("#E6C77A");     // dourado claro sobre preto
+    public static readonly Color Texto = Color.FromArgb("#6B6B73");
+    public static readonly Color Titulo = Color.FromArgb("#0B0B0D");
+    public static readonly Color Fundo = Color.FromArgb("#FAF8F3");
+    public static readonly Color FundoAzul = Color.FromArgb("#F6EFDC");
+    public static readonly Color Borda = Color.FromArgb("#E8E2D4");
     public static readonly Color Verde = Color.FromArgb("#16A34A");
     public static readonly Color Vermelho = Color.FromArgb("#C0392B");
     public static readonly Color Amarelo = Color.FromArgb("#B7791F");
 
     public static Brush Degrade => new LinearGradientBrush(
-        [new GradientStop(Azul, 0f), new GradientStop(Color.FromArgb("#0D3A86"), 0.55f), new GradientStop(Marinho, 1f)],
+        [new GradientStop(Color.FromArgb("#2B2416"), 0f), new GradientStop(Grafite, 0.45f), new GradientStop(Marinho, 1f)],
         new Point(0, 0), new Point(1, 1));
 
     public static Label L(string texto = "", double tamanho = 14, Color? cor = null, bool negrito = false, TextAlignment h = TextAlignment.Start) => new()

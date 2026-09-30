@@ -23,6 +23,9 @@ public sealed class BancoFixture : IAsyncLifetime
     private readonly string _banco = "pp_test_" + Guid.NewGuid().ToString("N")[..12];
     public string ConnectionString => new NpgsqlConnectionStringBuilder(_servidor) { Database = _banco }.ConnectionString;
     public ServiceProvider Services { get; private set; } = null!;
+    public const string ChaveOwner = "$aact_hmlg_000000000000000000owner0001";
+    public const string TokenOwner = "token-webhook-owner-0123456789abcdefghijklmnop";
+    public FakeGateway Gateway { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -43,18 +46,22 @@ public sealed class BancoFixture : IAsyncLifetime
             ["RepP:RazaoSocialDesenvolvedor"] = "PERSONALIPONTO TECNOLOGIA",
             ["RepP:EmailDesenvolvedor"] = "contato@personaliponto.com.br",
             ["Storage:DiretorioLocal"] = Path.Combine(Path.GetTempPath(), _banco),
-            ["Jwt:Chave"] = new string('k', 48)
+            ["Jwt:Chave"] = new string('k', 48),
+            ["Asaas:Ambiente"] = "Sandbox",
+            ["Asaas:UrlPublica"] = "https://painel.teste.local",
+            ["Asaas:Owner:ChaveApi"] = ChaveOwner,
+            ["Asaas:Owner:WebhookToken"] = TokenOwner
         }).Build();
 
         var sc = new ServiceCollection();
         sc.AddLogging(l => l.SetMinimumLevel(LogLevel.Warning));
         sc.AddSingleton<IConfiguration>(cfg);
         sc.AddPersonaliPonto(cfg, rotinasEmSegundoPlano: false);
+        sc.AddSingleton(Gateway);
+        sc.AddSingleton<Infrastructure.Pagamentos.IGatewayPagamento>(Gateway);
         Services = sc.BuildServiceProvider();
 
-        using var scope = Services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<RequestContext>().DefinirMigracao();
-        await scope.ServiceProvider.GetRequiredService<PersonaliPontoDbContext>().Database.MigrateAsync();
+        await Infrastructure.Hosting.Inicializacao.MigrarAsync(Services); // inclui o schema de sistema (Data Protection)
     }
 
     public async Task DisposeAsync()
@@ -75,6 +82,19 @@ public sealed class BancoFixture : IAsyncLifetime
         if (sistema) ctx.DefinirSistema();
         else if (tenantId is { } t) ctx.DefinirTenant(t);
         ctx.DefinirUsuario(Guid.NewGuid(), "Teste RH", "52998224725", papel, null);
+        return s;
+    }
+
+    /// <summary>Escopo de um usuário de canal (revendedor/parceiro), com a carteira resolvida como na aplicação.</summary>
+    public async Task<AsyncServiceScope> EscopoCanalAsync(Guid canalId, string papel)
+    {
+        var s = Services.CreateAsyncScope();
+        var ctx = s.ServiceProvider.GetRequiredService<RequestContext>();
+        ctx.DefinirUsuario(Guid.NewGuid(), "Usuário do canal", null, papel, null);
+        var carteira = await s.ServiceProvider.GetRequiredService<ContextoCanalService>().CarteiraAsync(canalId, default)
+            ?? throw new InvalidOperationException("Canal inexistente.");
+        ctx.DefinirCanal(canalId, carteira.Canais, carteira.Tenants);
+        ctx.DefinirSituacaoCanal(carteira.Canal.Status);
         return s;
     }
 

@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+jobs:
+  backend:
+    name: Backend (build + testes)
+    runs-on: ubuntu-latest
+    env:
+      # Senha descartável do Postgres efêmero do CI (não é segredo de produção).
+      PG_SENHA: ci-postgres
+      # Usada por BancoFixture/WebFixture. O usuário "postgres" é superusuário:
+      # pode criar bancos por teste e a role NOLOGIN personaliponto_app das migrations.
+      PERSONALIPONTO_TEST_DB: Host=localhost;Port=5432;Username=postgres;Password=ci-postgres
+      TZ: America/Sao_Paulo
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props', '**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # A solução PersonaliPonto.sln não inclui o app Mobile (MAUI) — ver PersonaliPonto.Backend.slnf.
+      - name: Restore
+        run: dotnet restore PersonaliPonto.Backend.slnf
+
+      - name: Build
+        run: dotnet build PersonaliPonto.Backend.slnf -c Release --no-restore
+
+      - name: Testes (Core)
+        run: dotnet test tests/PersonaliPonto.Core.Tests -c Release --no-build --logger trx --results-directory TestResults
+
+      - name: Testes (Integração)
+        run: dotnet test tests/PersonaliPonto.IntegrationTests -c Release --no-build --logger trx --results-directory TestResults
+
+      - name: Testes (Web)
+        run: dotnet test tests/PersonaliPonto.Web.Tests -c Release --no-build --logger trx --results-directory TestResults
+
+      - name: Publicar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+
+  mobile-android:
+    name: Mobile (Android, somente compilação)
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\.nuget\packages
+          key: nuget-mobile-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-mobile-${{ runner.os }}-
+
+      - name: Instalar workload maui-android
+        run: dotnet workload install maui-android
+
+      - name: Build Android
+        run: dotnet build src/PersonaliPonto.Mobile/PersonaliPonto.Mobile.csproj -c Release -f net10.0-android

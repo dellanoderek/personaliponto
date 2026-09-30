@@ -103,6 +103,15 @@ public sealed class RotinasPlataforma(IServiceScopeFactory scopes, NtpClock ntp,
         var alterados = await fat.ProcessarInadimplenciaAsync(ct);
         if (novas + alterados > 0) log.LogInformation("Faturamento: {Novas} faturas geradas, {Alterados} clientes com status alterado.", novas, alterados);
 
+        // Canais (E2): apuração da competência anterior (snapshot idempotente), faturas de canal e régua de canais.
+        var (apuracoes, faturasCanal, canais) = await scope.ServiceProvider.GetRequiredService<ApuracaoCanalService>().ProcessarAsync(ct);
+        if (apuracoes + faturasCanal + canais > 0)
+            log.LogInformation("Canais: {A} apurações, {F} faturas de canal, {C} canais com situação alterada.", apuracoes, faturasCanal, canais);
+
+        // Pagamentos (E3/E9): cobranças pendentes de envio ao Asaas sem mensagem viva no outbox voltam para a fila.
+        var reenviadas = await scope.ServiceProvider.GetRequiredService<Pagamentos.VarreduraCobrancasGateway>().EnfileirarPendentesAsync(ct);
+        if (reenviadas > 0) log.LogInformation("Pagamentos: {N} cobranças reenfileiradas para o gateway.", reenviadas);
+
         var db = scope.ServiceProvider.GetRequiredService<PersonaliPontoDbContext>();
         var fotos = await scope.ServiceProvider.GetRequiredService<Modules.RH.Services.FotoMarcacaoService>().ExpurgarAsync(ct);
         if (fotos > 0) log.LogInformation("{N} fotos de marcação excluídas por fim do prazo de retenção.", fotos);

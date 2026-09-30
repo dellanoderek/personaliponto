@@ -14,6 +14,7 @@ public sealed class AuditService(IRepPDbContext db, ITenantContext tenant, ICurr
         db.AuditLogs.Add(new AuditLog
         {
             TenantId = tenantId ?? tenant.TenantId,
+            CanalId = tenant.CanalId,
             UsuarioId = user.UserId,
             UsuarioNome = user.Nome,
             Acao = acao,

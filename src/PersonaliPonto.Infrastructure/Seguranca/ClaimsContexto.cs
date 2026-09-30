@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.Extensions.DependencyInjection;
 using PersonaliPonto.Infrastructure.Tenancy;
 using PersonaliPonto.Shared.Contracts;
 
@@ -17,11 +18,28 @@ public static class ClaimsContexto
         ctx.DefinirUsuario(G(PersonaliPontoClaims.UserId) ?? G(ClaimTypes.NameIdentifier), user.FindFirst(ClaimTypes.Name)?.Value,
             user.FindFirst("cpf")?.Value, papel, G(PersonaliPontoClaims.FuncionarioId));
 
-        // Papéis da plataforma operam em modo sistema, exceto quando "entram" num tenant (acesso de suporte auditado).
+        // Papéis da plataforma (Owner) operam em modo sistema, exceto quando "entram" num tenant ou no painel de um
+        // canal (acesso de suporte auditado). Usuários de canal nunca são sistema: a carteira é aplicada em seguida
+        // por ContextoCanalService (consulta assíncrona ao banco).
         var tenant = G(PersonaliPontoClaims.TenantId);
+        var canal = G(PersonaliPontoClaims.CanalId);
         if (tenant is { } t) ctx.DefinirTenant(t);
-        else if (papel is Roles.SuperAdmin or Roles.Suporte) ctx.DefinirSistema();
+        else if (canal is null && Roles.EhPlataforma(papel)) ctx.DefinirSistema();
     }
+
+    /// <summary>Preenche o contexto e, para usuários de canal, aplica a carteira visível.</summary>
+    public static async Task PreencherAsync(IServiceProvider sp, ClaimsPrincipal? user, string? ip, CancellationToken ct = default)
+    {
+        var ctx = sp.GetRequiredService<RequestContext>();
+        Preencher(ctx, user, ip);
+        await sp.GetRequiredService<ContextoCanalService>().AplicarAsync(user, ct);
+    }
+
+    public static Guid? CanalId(this ClaimsPrincipal u) =>
+        Guid.TryParse(u.FindFirst(PersonaliPontoClaims.CanalId)?.Value, out var g) ? g : null;
+
+    /// <summary>Usuário da plataforma (Owner), considerando o papel original mesmo em modo suporte.</summary>
+    public static bool EhPlataforma(this ClaimsPrincipal u) => u.IsInRole(Roles.SuperAdmin) || u.IsInRole(Roles.Suporte);
 
     public static Guid? FuncionarioId(this ClaimsPrincipal u) =>
         Guid.TryParse(u.FindFirst(PersonaliPontoClaims.FuncionarioId)?.Value, out var g) ? g : null;

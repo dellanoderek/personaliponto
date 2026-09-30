@@ -9,20 +9,42 @@
             var empresa = u.IsInRole(Roles.AdminEmpresa) || u.IsInRole(Roles.RH) || u.IsInRole(Roles.Gestor);
             var rh = u.IsInRole(Roles.AdminEmpresa) || u.IsInRole(Roles.RH);
             var suporte = u.FindFirst("suporte_cliente")?.Value;
+            var suporteCanal = u.FindFirst("suporte_canal")?.Value;
+            var canal = u.HasClaim(c => c.Type == PersonaliPontoClaims.CanalId) && Roles.PapeisCanal.Any(u.IsInRole) && suporte is null;
+            var revendedor = canal && (u.IsInRole(Roles.AdminRevendedor) || u.IsInRole(Roles.SuporteRevendedor));
+            var adminCanal = canal && (u.IsInRole(Roles.AdminRevendedor) || u.IsInRole(Roles.AdminParceiro));
+            if (canal) plataforma = false;
         }
         <div class="shell">
             <aside class="sidebar @(_menuAberto ? "aberta" : "")" @onclick="() => _menuAberto = false">
-                <a class="marca" href="@(plataforma ? "/plataforma" : empresa ? "/" : "/meu-ponto")"><img src="img/logo.png" alt="PersonaliPonto" /></a>
+                <a class="marca" href="@(plataforma ? "/plataforma" : canal ? "/canal" : empresa ? "/" : "/meu-ponto")"><img src="img/logo-escura.png" alt="PersonaliPonto" /></a>
                 <nav>
                     @if (plataforma)
                     {
                         <div class="secao">Plataforma</div>
                         <NavLink href="/plataforma" Match="NavLinkMatch.All"><Icone Nome="painel" />Visão geral</NavLink>
                         <NavLink href="/plataforma/clientes"><Icone Nome="predio" />Clientes</NavLink>
+                        <NavLink href="/plataforma/revendedores"><Icone Nome="globo" />Revendedores</NavLink>
                         <NavLink href="/plataforma/faturamento"><Icone Nome="dinheiro" />Faturamento</NavLink>
+                        <NavLink href="/plataforma/faturamento-canais"><Icone Nome="dinheiro" />Faturamento de canais</NavLink>
                         <NavLink href="/plataforma/importar"><Icone Nome="upload" />Importar planilha</NavLink>
                         <NavLink href="/plataforma/planos"><Icone Nome="cartao" />Planos</NavLink>
                         <NavLink href="/plataforma/acessos"><Icone Nome="escudo" />Acessos de suporte</NavLink>
+                    }
+                    @if (canal)
+                    {
+                        <div class="secao">@(revendedor ? "Revendedor" : "Parceiro")</div>
+                        <NavLink href="/canal" Match="NavLinkMatch.All"><Icone Nome="painel" />Visão geral</NavLink>
+                        <NavLink href="/canal/clientes"><Icone Nome="predio" />Clientes</NavLink>
+                        @if (revendedor)
+                        {
+                            <NavLink href="/canal/parceiros"><Icone Nome="pessoas" />Parceiros</NavLink>
+                        }
+                        <NavLink href="/canal/minha-conta"><Icone Nome="cartao" />@(revendedor ? "Minha conta PersonaliPonto" : "Minhas faturas")</NavLink>
+                        @if (adminCanal)
+                        {
+                            <NavLink href="/canal/usuarios"><Icone Nome="usuario" />Usuários do canal</NavLink>
+                        }
                     }
                     @if (empresa)
                     {
@@ -75,12 +97,27 @@
             </aside>
 
             <div class="conteudo">
+                @if (canal)
+                {
+                    <AvisoSituacaoCanal />
+                }
+                @if (suporte is null && suporteCanal is not null)
+                {
+                    <div class="alerta aviso" style="border-radius:0">
+                        <Icone Nome="escudo" />
+                        <div style="flex:1">Modo suporte: você está no painel do canal <b>@suporteCanal</b>. Todas as ações são auditadas.</div>
+                        <form method="post" action="/suporte/sair" data-enhance="false">
+                            <AntiforgeryToken />
+                            <button class="btn btn-sm btn-secundario" type="submit">Encerrar acesso</button>
+                        </form>
+                    </div>
+                }
                 @if (suporte is not null)
                 {
                     <div class="alerta aviso" style="border-radius:0">
                         <Icone Nome="escudo" />
                         <div style="flex:1">Modo suporte: você está acessando os dados de <b>@suporte</b>. Todas as ações são auditadas.</div>
-                        <form method="post" action="/plataforma/suporte/sair" data-enhance="false">
+                        <form method="post" action="/suporte/sair" data-enhance="false">
                             <AntiforgeryToken />
                             <button class="btn btn-sm btn-secundario" type="submit">Encerrar acesso</button>
                         </form>
@@ -89,7 +126,7 @@
                 <header class="topo">
                     <div class="linha">
                         <button class="btn btn-fantasma btn-sm menu-mobile" aria-label="Abrir menu" @onclick="() => _menuAberto = !_menuAberto" @onclick:stopPropagation="true"><Icone Nome="menu" /></button>
-                        <span class="contexto">@(plataforma ? "Administração da plataforma" : "Gestão de jornada")</span>
+                        <span class="contexto">@(plataforma ? "Administração da plataforma" : canal ? "Painel do canal" : "Gestão de jornada")</span>
                     </div>
                     <div class="usuario">
                         <div class="right" style="line-height:1.2">

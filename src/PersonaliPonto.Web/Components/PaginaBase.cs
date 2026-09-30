@@ -35,13 +35,21 @@ public abstract class PaginaBase : OwningComponentBase
     {
         if (_contextoPronto) return;
         Usuario = (await AuthState).User;
-        ClaimsContexto.Preencher(Svc<RequestContext>(), Usuario, null);
-        if (ContextoPlataforma) Svc<RequestContext>().DefinirSistema();
+        await ClaimsContexto.PreencherAsync(ScopedServices, Usuario, null);
+        if (ContextoPlataforma)
+        {
+            // Modo sistema é exclusivo do Owner: nunca concedido a usuário de canal ou de cliente.
+            if (!Usuario.EhPlataforma()) throw new UnauthorizedAccessException("Página exclusiva da plataforma.");
+            Svc<RequestContext>().DefinirSistema();
+        }
         _contextoPronto = true;
     }
 
     /// <summary>Páginas do Super Admin operam sobre todos os clientes, mesmo durante um acesso de suporte.</summary>
     protected virtual bool ContextoPlataforma => false;
+
+    protected RequestContext Contexto => Svc<RequestContext>();
+    protected Guid? CanalId => Usuario.CanalId();
 
     /// <summary>Carga inicial da página (substitui OnInitializedAsync nas páginas).</summary>
     protected virtual Task CarregarAsync() => Task.CompletedTask;
@@ -85,4 +93,35 @@ public abstract class PaginaBase : OwningComponentBase
 public abstract class PaginaPlataforma : PaginaBase
 {
     protected override bool ContextoPlataforma => true;
+}
+
+/// <summary>
+/// Base das páginas do painel de canal (revendedor/parceiro): contexto de canal com a carteira visível
+/// (cadastro e financeiro). Dados de ponto/RH dos clientes só via modo suporte auditado.
+/// </summary>
+public abstract class PaginaCanal : PaginaBase
+{
+    protected Modules.SaaS.Domain.Canal? Canal { get; private set; }
+    protected bool EhRevendedor => Canal?.Tipo == Modules.SaaS.Domain.TipoCanal.Revendedor;
+    protected bool EhAdminCanal => TemPapel(Shared.Contracts.Roles.AdminRevendedor, Shared.Contracts.Roles.AdminParceiro);
+
+    /// <summary>Painel bloqueado/suspenso pela régua de canal (D+15/D+30): só pendência e faturas.</summary>
+    protected bool PainelBloqueado => Canal?.Status is Modules.SaaS.Domain.StatusCanal.PainelBloqueado or Modules.SaaS.Domain.StatusCanal.Suspenso;
+
+    /// <summary>Páginas que continuam acessíveis com o painel bloqueado (pendência e faturas).</summary>
+    protected virtual bool PermitidaComPainelBloqueado => false;
+
+    public const string PaginaPendencia = "/canal/minha-conta";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GarantirContextoAsync();
+        if (CanalId is { } id) Canal = await Svc<Modules.SaaS.Services.CanalService>().ObterAsync(id, default);
+        if (PainelBloqueado && !PermitidaComPainelBloqueado)
+        {
+            Nav.NavigateTo(PaginaPendencia);
+            return;
+        }
+        await CarregarAsync();
+    }
 }

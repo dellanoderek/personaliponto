@@ -9,7 +9,10 @@ public static class SaasModule
     public static IServiceCollection AddModuloSaas(this IServiceCollection services)
     {
         services.AddScoped<ClienteService>();
+        services.AddScoped<CanalService>();
+        services.AddScoped<MunicipioService>();
         services.AddScoped<FaturamentoService>();
+        services.AddScoped<FaturamentoCanalService>();
         services.AddScoped<TenantUsoPolicy>();
         services.AddScoped<IMarcacaoInterceptor, TenantUsoInterceptor>();
         services.AddScoped<ImportacaoPlanilhaService>();

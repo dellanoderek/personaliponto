@@ -1,0 +1,79 @@
+@page "/canal"
+@attribute [Authorize(Policy = Politicas.Canal)]
+@inherits PaginaCanal
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Painel do canal — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="@(EhRevendedor ? "Revendedor" : "Parceiro")" Titulo="@($"Painel {Canal?.NomeMarca}")"
+           Descricao="Carteira de clientes, receita recorrente e situação comercial. Dados de ponto dos clientes só pelo modo suporte auditado.">
+    <Acoes>
+        @if (EhRevendedor)
+        {
+            <a class="btn btn-secundario" href="/canal/parceiros">Parceiros</a>
+        }
+        <a class="btn btn-primario" href="/canal/clientes?novo=1"><Icone Nome="mais" />Novo cliente</a>
+    </Acoes>
+</Cabecalho>
+
+@if (Canal is { Status: not Modules.SaaS.Domain.StatusCanal.Ativo })
+{
+    <div class="alerta aviso" style="margin-bottom:16px"><Icone Nome="alerta" /><div>Situação do canal: <SituacaoCanal Status="Canal.Status" />. Regularize a mensalidade para evitar bloqueio do painel. A marcação de ponto dos seus clientes nunca é bloqueada.</div></div>
+}
+
+@if (_ind is null)
+{
+    <Carregando />
+}
+else
+{
+    <div class="grade grade-4">
+        <Kpi Rotulo="Clientes ativos" Valor="@_ind.Ativos.ToString()" Detalhe="@($"{_ind.Clientes} na carteira · {_ind.EmTeste} em teste")" />
+        <Kpi Rotulo="Receita recorrente" Valor="@Formato.Moeda(_ind.ReceitaMensal)" Detalhe="@($"{_ind.FuncionariosContratados} funcionários contratados")" />
+        <Kpi Rotulo="Vencido (total)" Valor="@Formato.Moeda(_ind.Vencido)" Estado="@(_ind.Vencido > 0 ? "alerta" : null)" Detalhe="@($"{_ind.Suspensos} suspensos/inadimplentes")" />
+        @if (EhRevendedor)
+        {
+            <Kpi Rotulo="Parceiros" Valor="@_ind.Parceiros.ToString()" />
+        }
+        else
+        {
+            <Kpi Rotulo="Cancelados" Valor="@_ind.Cancelados.ToString()" />
+        }
+    </div>
+
+    <div class="card mt">
+        <div class="card-cab"><h2>Clientes da carteira</h2><a class="btn btn-secundario btn-sm" href="/canal/clientes">Ver todos</a></div>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Cliente</th><th>Situação</th><th class="num">Valor</th><th class="num">Func.</th><th class="num">Vencido</th></tr></thead>
+                <tbody>
+                    @foreach (var c in _clientes.Take(10))
+                    {
+                        <tr>
+                            <td><div style="font-weight:600">@c.RazaoSocial</div><div class="small muted">@Documentos.FormatarCnpj(c.Cnpj)</div></td>
+                            <td><StatusCliente Status="c.Status" /></td>
+                            <td class="num">@Formato.Moeda(c.Valor)</td>
+                            <td class="num">@c.Funcionarios</td>
+                            <td class="num">@(c.EmAberto > 0 ? Formato.Moeda(c.EmAberto) : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_clientes.Count == 0)
+        {
+            <Vazio Texto="Nenhum cliente na carteira ainda." Icone="predio" />
+        }
+    </div>
+}
+
+@code {
+    private IndicadoresCanal? _ind;
+    private List<LinhaGrade> _clientes = [];
+
+    protected override async Task CarregarAsync()
+    {
+        _ind = await Svc<CanalService>().IndicadoresAsync(Hoje, default);
+        _clientes = (await Svc<PainelPlataformaService>().GradeAsync(Hoje.Year, null, null, default)).ToList();
+    }
+}

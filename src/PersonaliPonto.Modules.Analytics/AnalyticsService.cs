@@ -200,7 +200,7 @@ public sealed class AnalyticsService(IRhDbContext db, EspelhoService espelho, IC
 
     private static void Cabecalho(IXLRange r)
     {
-        r.Style.Font.SetBold().Font.SetFontColor(XLColor.White).Fill.SetBackgroundColor(XLColor.FromHtml("#082352"));
+        r.Style.Font.SetBold().Font.SetFontColor(XLColor.White).Fill.SetBackgroundColor(XLColor.FromHtml("#0b0b0d"));
     }
 
     private static byte[] Salvar(XLWorkbook wb)

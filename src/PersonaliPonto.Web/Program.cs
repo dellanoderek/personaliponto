@@ -37,6 +37,11 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Politicas.Rh, p => p.RequireRole(Roles.AdminEmpresa, Roles.RH).RequireClaim(PersonaliPontoClaims.TenantId))
     .AddPolicy(Politicas.Admin, p => p.RequireRole(Roles.AdminEmpresa).RequireClaim(PersonaliPontoClaims.TenantId))
     .AddPolicy(Politicas.Plataforma, p => p.RequireRole(Roles.SuperAdmin, Roles.Suporte))
+    .AddPolicy(Politicas.PlataformaAdmin, p => p.RequireRole(Roles.SuperAdmin))
+    .AddPolicy(Politicas.Canal, p => p.RequireRole(Roles.PapeisCanal).RequireClaim(PersonaliPontoClaims.CanalId))
+    .AddPolicy(Politicas.CanalAdmin, p => p.RequireRole(Roles.AdminRevendedor, Roles.AdminParceiro).RequireClaim(PersonaliPontoClaims.CanalId))
+    .AddPolicy(Politicas.Revendedor, p => p.RequireRole(Roles.PapeisRevendedor).RequireClaim(PersonaliPontoClaims.CanalId))
+    .AddPolicy(Politicas.RevendedorAdmin, p => p.RequireRole(Roles.AdminRevendedor).RequireClaim(PersonaliPontoClaims.CanalId))
     .AddPolicy(Politicas.Funcionario, p => p.RequireClaim(PersonaliPontoClaims.FuncionarioId).RequireClaim(PersonaliPontoClaims.TenantId));
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<Notificacoes>();
@@ -49,6 +54,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 });
 
 builder.Services.AddLocalization();
+builder.Services.AddLimiteWebhook(cfg);
 
 var app = builder.Build();
 app.UseRequestLocalization(new RequestLocalizationOptions().SetDefaultCulture("pt-BR").AddSupportedCultures("pt-BR").AddSupportedUICultures("pt-BR"));
@@ -81,10 +87,11 @@ app.Use(async (ctx, next) =>
 app.UseAuthentication();
 app.Use(async (ctx, next) =>
 {
-    ClaimsContexto.Preencher(ctx.RequestServices.GetRequiredService<RequestContext>(), ctx.User, ctx.Connection.RemoteIpAddress?.ToString());
+    await ClaimsContexto.PreencherAsync(ctx.RequestServices, ctx.User, ctx.Connection.RemoteIpAddress?.ToString(), ctx.RequestAborted);
     await next();
 });
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -92,6 +99,7 @@ app.MapHealthChecks("/health");
 app.MapContaEndpoints();
 app.MapDownloadEndpoints();
 app.MapTerminalEndpoints();
+app.MapPagamentosEndpoints();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.Run();

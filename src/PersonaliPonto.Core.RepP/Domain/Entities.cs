@@ -39,6 +39,25 @@ public class Tenant
     public DateTimeOffset? TesteAte { get; set; }
     public string? EmailContato { get; set; }
     public string? TelefoneContato { get; set; }
+    /// <summary>Canal (Owner, revendedor ou parceiro) dono do cliente. Obrigatório.</summary>
+    public Guid CanalDonoId { get; set; }
+    /// <summary>Município (IBGE) — usado para agrupar entidades públicas.</summary>
+    public Guid? MunicipioId { get; set; }
+    public TipoEntidade TipoEntidade { get; set; } = TipoEntidade.Privada;
+}
+
+public enum TipoEntidade
+{
+    Privada = 0,
+    Publica = 1
+}
+
+/// <summary>Nível em que o usuário atua: plataforma (Owner), canal (revendedor/parceiro) ou cliente (tenant).</summary>
+public enum EscopoUsuario
+{
+    Plataforma = 0,
+    Canal = 1,
+    Tenant = 2
 }
 
 public enum TipoIdentificador
@@ -263,6 +282,8 @@ public class AuditLog : IImmutableEntity
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
     public Guid? TenantId { get; set; }
+    /// <summary>Canal que executou a ação (usuÃ¡rios de revendedor/parceiro).</summary>
+    public Guid? CanalId { get; set; }
     public Guid? UsuarioId { get; set; }
     public string? UsuarioNome { get; set; }
     public string Acao { get; set; } = "";
@@ -276,8 +297,12 @@ public class AuditLog : IImmutableEntity
 public class Usuario
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
-    /// <summary>Nulo para usuários da plataforma (Super Admin/Suporte).</summary>
+    /// <summary>Nulo para usuários da plataforma (Super Admin/Suporte) e de canal.</summary>
     public Guid? TenantId { get; set; }
+    /// <summary>Canal do usuário de escopo Canal (revendedor ou parceiro).</summary>
+    public Guid? CanalId { get; set; }
+    /// <summary>Derivado de TenantId/CanalId na gravação (ver PersonaliPontoDbContext).</summary>
+    public EscopoUsuario Escopo { get; set; } = EscopoUsuario.Tenant;
     public string Email { get; set; } = "";
     public string Nome { get; set; } = "";
     public string? Cpf { get; set; }

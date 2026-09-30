@@ -5,11 +5,11 @@
 
 <PageTitle>Acessos de suporte — PersonaliPonto</PageTitle>
 
-<Cabecalho Secao="Super Admin" Titulo="Acessos de suporte" Descricao="Todo acesso da equipe da plataforma aos dados de um cliente é registrado com motivo, horário e IP." />
+<Cabecalho Secao="Super Admin" Titulo="Acessos de suporte" Descricao="Todo acesso de suporte (plataforma, revendedores e parceiros) aos dados de um cliente ou painel de canal é registrado com motivo, horário e IP." />
 
 <div class="card">
     <table class="tabela">
-        <thead><tr><th>Início</th><th>Fim</th><th>Usuário</th><th>Cliente</th><th>Motivo</th><th>IP</th></tr></thead>
+        <thead><tr><th>Início</th><th>Fim</th><th>Usuário</th><th>Origem</th><th>Alvo</th><th>Motivo</th><th>IP</th></tr></thead>
         <tbody>
             @foreach (var a in _lista)
             {
@@ -17,7 +17,8 @@
                     <td class="small nowrap">@a.Inicio.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
                     <td class="small nowrap">@(a.Fim?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "em aberto")</td>
                     <td>@a.UsuarioNome</td>
-                    <td style="font-weight:600">@_clientes.GetValueOrDefault(a.TenantId)</td>
+                    <td class="small">@a.NivelOrigem@(a.CanalId is { } co ? " · " + _canais.GetValueOrDefault(co) : "")</td>
+                    <td style="font-weight:600">@(a.TenantId is { } t ? _clientes.GetValueOrDefault(t) : a.CanalAlvoId is { } c ? "Painel " + _canais.GetValueOrDefault(c) : "")</td>
                     <td>@a.Motivo</td>
                     <td class="small">@a.Ip</td>
                 </tr>
@@ -33,10 +34,12 @@
 @code {
     private List<AcessoSuporte> _lista = [];
     private Dictionary<Guid, string> _clientes = [];
+    private Dictionary<Guid, string> _canais = [];
 
     protected override async Task CarregarAsync()
     {
         _lista = await Db.AcessosSuporte.AsNoTracking().OrderByDescending(a => a.Inicio).Take(500).ToListAsync();
         _clientes = await Db.Tenants.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Nome);
+        _canais = await Db.Canais.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.NomeMarca);
     }
 }

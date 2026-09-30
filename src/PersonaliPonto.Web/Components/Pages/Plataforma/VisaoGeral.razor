@@ -38,7 +38,7 @@ else
         <div class="card span-2">
             <div class="card-cab"><h2>Faturado × recebido (12 meses)</h2></div>
             <div class="card-corpo">
-                <GraficoBarras Pontos="_receita" Series="@(["Recebido", "Em aberto"])" Cores="@(["#1166d6", "#21b8ef"])" Formatar="v => Formato.Moeda((decimal)v)" Titulo="Receita" />
+                <GraficoBarras Pontos="_receita" Series="@(["Recebido", "Em aberto"])" Cores="@(["#c9a54c", "#4a4a52"])" Formatar="v => Formato.Moeda((decimal)v)" Titulo="Receita" />
             </div>
         </div>
         <div class="card marinho">
@@ -59,7 +59,7 @@ else
     <div class="card mt">
         <div class="card-cab"><h2>Marcações por dia (30 dias)</h2></div>
         <div class="card-corpo">
-            <GraficoBarras Pontos="_marcacoes" Series="@(["Marcações"])" Cores="@(["#21b8ef"])" Titulo="Marcações" />
+            <GraficoBarras Pontos="_marcacoes" Series="@(["Marcações"])" Cores="@(["#c9a54c"])" Titulo="Marcações" />
         </div>
     </div>
 

@@ -121,6 +121,10 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("acao");
 
+                    b.Property<Guid?>("CanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_id");
+
                     b.Property<string>("Dados")
                         .HasColumnType("jsonb")
                         .HasColumnName("dados");
@@ -156,6 +160,9 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_audit_logs");
+
+                    b.HasIndex("CanalId", "Em")
+                        .HasDatabaseName("ix_audit_logs_canal_id_em");
 
                     b.HasIndex("TenantId", "Em")
                         .HasDatabaseName("ix_audit_logs_tenant_id_em");
@@ -781,6 +788,10 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid>("CanalDonoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_dono_id");
+
                     b.Property<DateTimeOffset>("CriadoEm")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("criado_em");
@@ -788,6 +799,10 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                     b.Property<string>("EmailContato")
                         .HasColumnType("text")
                         .HasColumnName("email_contato");
+
+                    b.Property<Guid?>("MunicipioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("municipio_id");
 
                     b.Property<string>("Nome")
                         .IsRequired()
@@ -813,8 +828,18 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("teste_ate");
 
+                    b.Property<int>("TipoEntidade")
+                        .HasColumnType("integer")
+                        .HasColumnName("tipo_entidade");
+
                     b.HasKey("Id")
                         .HasName("pk_tenants");
+
+                    b.HasIndex("CanalDonoId")
+                        .HasDatabaseName("ix_tenants_canal_dono_id");
+
+                    b.HasIndex("MunicipioId")
+                        .HasDatabaseName("ix_tenants_municipio_id");
 
                     b.HasIndex("Slug")
                         .IsUnique()
@@ -957,6 +982,10 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("bloqueado_ate");
 
+                    b.Property<Guid?>("CanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_id");
+
                     b.Property<string>("Cpf")
                         .HasMaxLength(11)
                         .HasColumnType("character varying(11)")
@@ -975,6 +1004,10 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("email");
+
+                    b.Property<int>("Escopo")
+                        .HasColumnType("integer")
+                        .HasColumnName("escopo");
 
                     b.Property<Guid?>("FuncionarioId")
                         .HasColumnType("uuid")
@@ -1019,11 +1052,17 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_usuarios");
 
+                    b.HasIndex("CanalId")
+                        .HasDatabaseName("ix_usuarios_canal_id");
+
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("ix_usuarios_email");
 
-                    b.ToTable("usuarios", "personaliponto");
+                    b.ToTable("usuarios", "personaliponto", t =>
+                        {
+                            t.HasCheckConstraint("ck_usuarios_escopo", "(escopo = 0 AND tenant_id IS NULL AND canal_id IS NULL) OR (escopo = 1 AND canal_id IS NOT NULL AND tenant_id IS NULL) OR (escopo = 2 AND tenant_id IS NOT NULL AND canal_id IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("PersonaliPonto.Modules.RH.Domain.AssinaturaEspelho", b =>
@@ -1609,6 +1648,14 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("CanalAlvoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_alvo_id");
+
+                    b.Property<Guid?>("CanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_id");
+
                     b.Property<DateTimeOffset?>("Fim")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("fim");
@@ -1626,7 +1673,11 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("motivo");
 
-                    b.Property<Guid>("TenantId")
+                    b.Property<int>("NivelOrigem")
+                        .HasColumnType("integer")
+                        .HasColumnName("nivel_origem");
+
+                    b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
@@ -1642,10 +1693,108 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_acessos_suporte");
 
+                    b.HasIndex("CanalId", "Inicio")
+                        .HasDatabaseName("ix_acessos_suporte_canal_id_inicio");
+
                     b.HasIndex("TenantId", "Inicio")
                         .HasDatabaseName("ix_acessos_suporte_tenant_id_inicio");
 
                     b.ToTable("acessos_suporte", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ApuracaoUsoCanal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_id");
+
+                    b.Property<DateOnly>("Competencia")
+                        .HasColumnType("date")
+                        .HasColumnName("competencia");
+
+                    b.Property<int>("EmpresasAtivas")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresas_ativas");
+
+                    b.Property<int>("FuncionariosAtivos")
+                        .HasColumnType("integer")
+                        .HasColumnName("funcionarios_ativos");
+
+                    b.Property<DateTimeOffset>("GeradaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("gerada_em");
+
+                    b.HasKey("Id")
+                        .HasName("pk_apuracoes_uso_canal");
+
+                    b.HasIndex("CanalId", "Competencia")
+                        .IsUnique()
+                        .HasDatabaseName("ix_apuracoes_uso_canal_canal_id_competencia");
+
+                    b.ToTable("apuracoes_uso_canal", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ApuracaoUsoTenant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ApuracaoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("apuracao_id");
+
+                    b.Property<Guid>("CanalDonoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_dono_id");
+
+                    b.Property<Guid>("CanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_id");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cliente_id");
+
+                    b.Property<bool>("EmpresaAtiva")
+                        .HasColumnType("boolean")
+                        .HasColumnName("empresa_ativa");
+
+                    b.Property<int>("FuncionariosAtivos")
+                        .HasColumnType("integer")
+                        .HasColumnName("funcionarios_ativos");
+
+                    b.Property<string>("NomeCliente")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nome_cliente");
+
+                    b.Property<int>("StatusCliente")
+                        .HasColumnType("integer")
+                        .HasColumnName("status_cliente");
+
+                    b.Property<int>("TipoEntidade")
+                        .HasColumnType("integer")
+                        .HasColumnName("tipo_entidade");
+
+                    b.HasKey("Id")
+                        .HasName("pk_apuracoes_uso_tenant");
+
+                    b.HasIndex("CanalId")
+                        .HasDatabaseName("ix_apuracoes_uso_tenant_canal_id");
+
+                    b.HasIndex("ApuracaoId", "ClienteId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_apuracoes_uso_tenant_apuracao_id_cliente_id");
+
+                    b.ToTable("apuracoes_uso_tenant", "personaliponto");
                 });
 
             modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.Assinatura", b =>
@@ -1747,6 +1896,314 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                     b.ToTable("assinaturas", "personaliponto");
                 });
 
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.AssinaturaPremium", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_id");
+
+                    b.Property<DateOnly?>("CanceladaEm")
+                        .HasColumnType("date")
+                        .HasColumnName("cancelada_em");
+
+                    b.Property<DateTimeOffset>("CriadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criada_em");
+
+                    b.Property<DateOnly>("Inicio")
+                        .HasColumnType("date")
+                        .HasColumnName("inicio");
+
+                    b.HasKey("Id")
+                        .HasName("pk_assinaturas_premium");
+
+                    b.HasIndex("CanalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_assinaturas_premium_vigente")
+                        .HasFilter("cancelada_em IS NULL");
+
+                    b.ToTable("assinaturas_premium", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.Canal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AppProprioAtivo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("app_proprio_ativo");
+
+                    b.Property<DateOnly?>("AppProprioDesde")
+                        .HasColumnType("date")
+                        .HasColumnName("app_proprio_desde");
+
+                    b.Property<bool>("AppProprioImplantacaoCobrada")
+                        .HasColumnType("boolean")
+                        .HasColumnName("app_proprio_implantacao_cobrada");
+
+                    b.Property<string>("Caminho")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("caminho");
+
+                    b.Property<Guid?>("CanalPaiId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_pai_id");
+
+                    b.Property<string>("Cnpj")
+                        .IsRequired()
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)")
+                        .HasColumnName("cnpj");
+
+                    b.Property<DateTimeOffset>("CriadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criado_em");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("email");
+
+                    b.Property<int?>("IsencaoMinClientesPublicos")
+                        .HasColumnType("integer")
+                        .HasColumnName("isencao_min_clientes_publicos");
+
+                    b.Property<decimal?>("MinimoMensalParceiro")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("minimo_mensal_parceiro");
+
+                    b.Property<int>("Nivel")
+                        .HasColumnType("integer")
+                        .HasColumnName("nivel");
+
+                    b.Property<string>("NomeMarca")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("nome_marca");
+
+                    b.Property<decimal?>("PrecoFuncionarioParceiro")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("preco_funcionario_parceiro");
+
+                    b.Property<DateOnly?>("PremiumIsentoAte")
+                        .HasColumnType("date")
+                        .HasColumnName("premium_isento_ate");
+
+                    b.Property<string>("RazaoSocial")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("razao_social");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("slug");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Telefone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("telefone");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer")
+                        .HasColumnName("tipo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_canais");
+
+                    b.HasIndex("Caminho")
+                        .IsUnique()
+                        .HasDatabaseName("ix_canais_caminho");
+
+                    b.HasIndex("CanalPaiId")
+                        .HasDatabaseName("ix_canais_canal_pai_id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ix_canais_slug");
+
+                    b.HasIndex("Tipo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_canais_owner_unico")
+                        .HasFilter("tipo = 1");
+
+                    b.ToTable("canais", "personaliponto", t =>
+                        {
+                            t.HasCheckConstraint("ck_canais_nivel", "nivel BETWEEN 1 AND 3 AND nivel = tipo");
+
+                            t.HasCheckConstraint("ck_canais_pai", "(tipo = 1) = (canal_pai_id IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ContaGatewayCanal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ativa");
+
+                    b.Property<Guid>("CanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_id");
+
+                    b.Property<string>("ChaveCifrada")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("chave_cifrada");
+
+                    b.Property<string>("ChaveFinal")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("chave_final");
+
+                    b.Property<DateTimeOffset>("ConectadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("conectada_em");
+
+                    b.Property<Guid?>("ConectadaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conectada_por");
+
+                    b.Property<DateTimeOffset?>("DesconectadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("desconectada_em");
+
+                    b.Property<string>("DocumentoConta")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)")
+                        .HasColumnName("documento_conta");
+
+                    b.Property<string>("NomeConta")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nome_conta");
+
+                    b.Property<string>("Provedor")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("provedor");
+
+                    b.Property<bool>("Sandbox")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sandbox");
+
+                    b.Property<string>("WebhookId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("webhook_id");
+
+                    b.Property<string>("WebhookTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("webhook_token_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contas_gateway");
+
+                    b.HasIndex("CanalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contas_gateway_canal_ativa")
+                        .HasFilter("ativa");
+
+                    b.HasIndex("WebhookTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contas_gateway_webhook_token_hash");
+
+                    b.ToTable("contas_gateway", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.EventoGateway", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CobrancaId")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("cobranca_id");
+
+                    b.Property<string>("EventoId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("evento_id");
+
+                    b.Property<DateTimeOffset?>("OcorridoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ocorrido_em");
+
+                    b.Property<string>("Origem")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("origem");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTimeOffset?>("ProcessadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processado_em");
+
+                    b.Property<DateTimeOffset>("RecebidoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recebido_em");
+
+                    b.Property<string>("Resultado")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("resultado");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("tipo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_eventos_gateway");
+
+                    b.HasIndex("CobrancaId")
+                        .HasDatabaseName("ix_eventos_gateway_cobranca_id");
+
+                    b.HasIndex("Origem", "EventoId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_eventos_gateway_origem_evento_id");
+
+                    b.ToTable("eventos_gateway", "personaliponto");
+                });
+
             modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.Fatura", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1769,6 +2226,52 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                     b.Property<string>("FormaPagamento")
                         .HasColumnType("text")
                         .HasColumnName("forma_pagamento");
+
+                    b.Property<string>("GatewayBoletoUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("gateway_boleto_url");
+
+                    b.Property<string>("GatewayCobrancaId")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("gateway_cobranca_id");
+
+                    b.Property<Guid?>("GatewayContaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("gateway_conta_id");
+
+                    b.Property<string>("GatewayErro")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("gateway_erro");
+
+                    b.Property<string>("GatewayLinhaDigitavel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("gateway_linha_digitavel");
+
+                    b.Property<string>("GatewayLink")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("gateway_link");
+
+                    b.Property<string>("GatewayPixCopiaCola")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("gateway_pix_copia_cola");
+
+                    b.Property<string>("GatewayPixQrCode")
+                        .HasColumnType("text")
+                        .HasColumnName("gateway_pix_qr_code");
+
+                    b.Property<int>("GatewayStatus")
+                        .HasColumnType("integer")
+                        .HasColumnName("gateway_status");
+
+                    b.Property<DateTimeOffset?>("GatewayUltimoEventoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("gateway_ultimo_evento_em");
 
                     b.Property<string>("Observacao")
                         .HasColumnType("text")
@@ -1803,11 +2306,233 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_faturas");
 
+                    b.HasIndex("GatewayCobrancaId")
+                        .HasDatabaseName("ix_faturas_gateway_cobranca_id");
+
                     b.HasIndex("TenantId", "Competencia")
                         .IsUnique()
                         .HasDatabaseName("ix_faturas_tenant_id_competencia");
 
                     b.ToTable("faturas", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.FaturaCanal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ApuracaoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("apuracao_id");
+
+                    b.Property<DateTimeOffset?>("AtualizadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("atualizada_em");
+
+                    b.Property<Guid>("CanalPagadorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_pagador_id");
+
+                    b.Property<Guid>("CanalRecebedorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("canal_recebedor_id");
+
+                    b.Property<DateOnly>("Competencia")
+                        .HasColumnType("date")
+                        .HasColumnName("competencia");
+
+                    b.Property<DateTimeOffset>("CriadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criada_em");
+
+                    b.Property<string>("FormaPagamento")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("forma_pagamento");
+
+                    b.Property<string>("GatewayBoletoUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("gateway_boleto_url");
+
+                    b.Property<string>("GatewayCobrancaId")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("gateway_cobranca_id");
+
+                    b.Property<Guid?>("GatewayContaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("gateway_conta_id");
+
+                    b.Property<string>("GatewayErro")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("gateway_erro");
+
+                    b.Property<string>("GatewayLinhaDigitavel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("gateway_linha_digitavel");
+
+                    b.Property<string>("GatewayLink")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("gateway_link");
+
+                    b.Property<string>("GatewayPixCopiaCola")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("gateway_pix_copia_cola");
+
+                    b.Property<string>("GatewayPixQrCode")
+                        .HasColumnType("text")
+                        .HasColumnName("gateway_pix_qr_code");
+
+                    b.Property<int>("GatewayStatus")
+                        .HasColumnType("integer")
+                        .HasColumnName("gateway_status");
+
+                    b.Property<DateTimeOffset?>("GatewayUltimoEventoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("gateway_ultimo_evento_em");
+
+                    b.Property<string>("Observacao")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("observacao");
+
+                    b.Property<DateOnly?>("PagaEm")
+                        .HasColumnType("date")
+                        .HasColumnName("paga_em");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer")
+                        .HasColumnName("tipo");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("valor");
+
+                    b.Property<decimal?>("ValorPago")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("valor_pago");
+
+                    b.Property<DateOnly>("Vencimento")
+                        .HasColumnType("date")
+                        .HasColumnName("vencimento");
+
+                    b.HasKey("Id")
+                        .HasName("pk_faturas_canal");
+
+                    b.HasIndex("CanalPagadorId")
+                        .HasDatabaseName("ix_faturas_canal_canal_pagador_id");
+
+                    b.HasIndex("GatewayCobrancaId")
+                        .HasDatabaseName("ix_faturas_canal_gateway_cobranca_id");
+
+                    b.HasIndex("CanalRecebedorId", "Competencia")
+                        .HasDatabaseName("ix_faturas_canal_canal_recebedor_id_competencia");
+
+                    b.HasIndex("CanalPagadorId", "CanalRecebedorId", "Competencia")
+                        .IsUnique()
+                        .HasDatabaseName("ix_faturas_canal_mensal_unica")
+                        .HasFilter("tipo <> 3");
+
+                    b.ToTable("faturas_canal", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ItemFaturaCanal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("descricao");
+
+                    b.Property<Guid>("FaturaCanalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("fatura_canal_id");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("integer")
+                        .HasColumnName("ordem");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("quantidade");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer")
+                        .HasColumnName("tipo");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("valor");
+
+                    b.Property<decimal>("ValorUnitario")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("valor_unitario");
+
+                    b.HasKey("Id")
+                        .HasName("pk_itens_fatura_canal");
+
+                    b.HasIndex("FaturaCanalId")
+                        .HasDatabaseName("ix_itens_fatura_canal_fatura_canal_id");
+
+                    b.ToTable("itens_fatura_canal", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.Municipio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("CodigoIbge")
+                        .HasColumnType("integer")
+                        .HasColumnName("codigo_ibge");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("nome");
+
+                    b.Property<string>("Uf")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character(2)")
+                        .HasColumnName("uf")
+                        .IsFixedLength();
+
+                    b.HasKey("Id")
+                        .HasName("pk_municipios");
+
+                    b.HasIndex("CodigoIbge")
+                        .IsUnique()
+                        .HasDatabaseName("ix_municipios_codigo_ibge");
+
+                    b.HasIndex("Uf", "Nome")
+                        .HasDatabaseName("ix_municipios_uf_nome");
+
+                    b.ToTable("municipios", "personaliponto");
                 });
 
             modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.Plano", b =>
@@ -1851,6 +2576,87 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasName("pk_planos");
 
                     b.ToTable("planos", "personaliponto");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.TabelaPrecoCanal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AppProprioImplantacao")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("app_proprio_implantacao");
+
+                    b.Property<decimal>("AppProprioMensal")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("app_proprio_mensal");
+
+                    b.Property<DateTimeOffset>("CriadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criada_em");
+
+                    b.Property<int>("Faixa1Ate")
+                        .HasColumnType("integer")
+                        .HasColumnName("faixa1_ate");
+
+                    b.Property<decimal>("Faixa1Preco")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("faixa1_preco");
+
+                    b.Property<int>("Faixa2Ate")
+                        .HasColumnType("integer")
+                        .HasColumnName("faixa2_ate");
+
+                    b.Property<decimal>("Faixa2Preco")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("faixa2_preco");
+
+                    b.Property<decimal>("Faixa3Preco")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("faixa3_preco");
+
+                    b.Property<decimal>("MinimoMensal")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("minimo_mensal");
+
+                    b.Property<string>("Observacao")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("observacao");
+
+                    b.Property<decimal>("PrecoEmpresaAtiva")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("preco_empresa_ativa");
+
+                    b.Property<decimal>("PrecoPremium")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)")
+                        .HasColumnName("preco_premium");
+
+                    b.Property<DateOnly>("VigenciaInicio")
+                        .HasColumnType("date")
+                        .HasColumnName("vigencia_inicio");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tabelas_preco_canal");
+
+                    b.HasIndex("VigenciaInicio")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tabelas_preco_canal_vigencia_inicio");
+
+                    b.ToTable("tabelas_preco_canal", "personaliponto", t =>
+                        {
+                            t.HasCheckConstraint("ck_tabelas_preco_canal_faixas", "faixa1_ate > 0 AND faixa2_ate > faixa1_ate");
+                        });
                 });
 
             modelBuilder.Entity("PersonaliPonto.Core.RepP.Domain.Estabelecimento", b =>
@@ -1911,6 +2717,51 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_registros_rep_funcionarios_funcionario_id");
                 });
 
+            modelBuilder.Entity("PersonaliPonto.Core.RepP.Domain.Tenant", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalDonoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tenants_canais_canal_dono_id");
+
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Municipio", null)
+                        .WithMany()
+                        .HasForeignKey("MunicipioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_tenants_municipios_municipio_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Core.RepP.Domain.Usuario", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_usuarios_canais_canal_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ApuracaoUsoCanal", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_apuracoes_uso_canal_canais_canal_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ApuracaoUsoTenant", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.ApuracaoUsoCanal", null)
+                        .WithMany()
+                        .HasForeignKey("ApuracaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_apuracoes_uso_tenant_apuracoes_uso_canal_apuracao_id");
+                });
+
             modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.Assinatura", b =>
                 {
                     b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Plano", "Plano")
@@ -1920,6 +2771,67 @@ namespace PersonaliPonto.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_assinaturas_planos_plano_id");
 
                     b.Navigation("Plano");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.AssinaturaPremium", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_assinaturas_premium_canais_canal_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.Canal", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalPaiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_canais_canais_canal_pai_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ContaGatewayCanal", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contas_gateway_canais_canal_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.FaturaCanal", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalPagadorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faturas_canal_canais_canal_pagador_id");
+
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.Canal", null)
+                        .WithMany()
+                        .HasForeignKey("CanalRecebedorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_faturas_canal_canais_canal_recebedor_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.ItemFaturaCanal", b =>
+                {
+                    b.HasOne("PersonaliPonto.Modules.SaaS.Domain.FaturaCanal", null)
+                        .WithMany("Itens")
+                        .HasForeignKey("FaturaCanalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_itens_fatura_canal_faturas_canal_fatura_canal_id");
+                });
+
+            modelBuilder.Entity("PersonaliPonto.Modules.SaaS.Domain.FaturaCanal", b =>
+                {
+                    b.Navigation("Itens");
                 });
 #pragma warning restore 612, 618
         }

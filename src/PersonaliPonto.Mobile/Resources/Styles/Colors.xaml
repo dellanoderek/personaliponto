@@ -4,16 +4,21 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
 
-    <!-- Paleta PersonaliPonto (apresentação comercial) -->
-    <Color x:Key="Marinho">#082352</Color>
-    <Color x:Key="Azul">#1166D6</Color>
-    <Color x:Key="AzulEscuro">#0B4FAE</Color>
-    <Color x:Key="Ciano">#21B8EF</Color>
-    <Color x:Key="Texto">#59708E</Color>
-    <Color x:Key="Titulo">#082452</Color>
-    <Color x:Key="Fundo">#F4F8FB</Color>
-    <Color x:Key="FundoAzul">#E6F4FD</Color>
-    <Color x:Key="Borda">#DBE6F0</Color>
+    <!-- Paleta PersonaliPonto preto + dourado (tema neutro azul: docs/marca/tema-neutro-azul.md) -->
+    <Color x:Key="Preto">#0B0B0D</Color>
+    <Color x:Key="Grafite">#1A1A1F</Color>
+    <Color x:Key="Ouro">#C9A54C</Color>
+    <Color x:Key="OuroClaro">#E6C77A</Color>
+    <Color x:Key="OuroEscuro">#9C7A2C</Color>
+    <Color x:Key="Marinho">#0B0B0D</Color>
+    <Color x:Key="Azul">#7A5C1E</Color>
+    <Color x:Key="AzulEscuro">#5E4715</Color>
+    <Color x:Key="Ciano">#E6C77A</Color>
+    <Color x:Key="Texto">#6B6B73</Color>
+    <Color x:Key="Titulo">#0B0B0D</Color>
+    <Color x:Key="Fundo">#FAF8F3</Color>
+    <Color x:Key="FundoAzul">#F6EFDC</Color>
+    <Color x:Key="Borda">#E8E2D4</Color>
     <Color x:Key="Verde">#16A34A</Color>
     <Color x:Key="VerdeFundo">#E8F7EE</Color>
     <Color x:Key="Vermelho">#C0392B</Color>
@@ -23,25 +28,25 @@
     <Color x:Key="Cinza">#94A3B8</Color>
 
     <!-- Nomes exigidos pelo template padrão -->
-    <Color x:Key="Primary">#1166D6</Color>
-    <Color x:Key="PrimaryDark">#082352</Color>
+    <Color x:Key="Primary">#7A5C1E</Color>
+    <Color x:Key="PrimaryDark">#0B0B0D</Color>
     <Color x:Key="PrimaryDarkText">#FFFFFF</Color>
-    <Color x:Key="Secondary">#E6F4FD</Color>
-    <Color x:Key="SecondaryDarkText">#082452</Color>
-    <Color x:Key="Tertiary">#21B8EF</Color>
+    <Color x:Key="Secondary">#F6EFDC</Color>
+    <Color x:Key="SecondaryDarkText">#0B0B0D</Color>
+    <Color x:Key="Tertiary">#C9A54C</Color>
     <Color x:Key="White">White</Color>
     <Color x:Key="Black">Black</Color>
     <Color x:Key="Magenta">#C0392B</Color>
-    <Color x:Key="MidnightBlue">#082352</Color>
+    <Color x:Key="MidnightBlue">#0B0B0D</Color>
     <Color x:Key="OffBlack">#1F1F1F</Color>
     <Color x:Key="Gray100">#EEF2F6</Color>
-    <Color x:Key="Gray200">#DBE6F0</Color>
+    <Color x:Key="Gray200">#E8E2D4</Color>
     <Color x:Key="Gray300">#C8D3DF</Color>
     <Color x:Key="Gray400">#94A3B8</Color>
-    <Color x:Key="Gray500">#59708E</Color>
+    <Color x:Key="Gray500">#6B6B73</Color>
     <Color x:Key="Gray600">#475569</Color>
-    <Color x:Key="Gray900">#082452</Color>
-    <Color x:Key="Gray950">#061A3D</Color>
+    <Color x:Key="Gray900">#0B0B0D</Color>
+    <Color x:Key="Gray950">#050506</Color>
 
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
     <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>

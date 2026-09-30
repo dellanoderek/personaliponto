@@ -30,7 +30,7 @@ public class Assinatura : ITenantEntity
     public int FuncionariosContratados { get; set; }
     /// <summary>Custo mensal do cliente para a operação (licença de fornecedor, infraestrutura).</summary>
     public decimal CustoMensal { get; set; }
-    /// <summary>Origem/fornecedor atual (ex.: EZPOINT, COTIPONTO, TEMPO CERTO).</summary>
+    /// <summary>Origem/fornecedor atual (ex.: EZPOINT, COTIPONTO, PERSONALIPONTO).</summary>
     public string? Fornecedor { get; set; }
     public int DiaVencimento { get; set; } = 10;
     /// <summary>Dias após o vencimento até marcar como inadimplente.</summary>
@@ -53,7 +53,7 @@ public enum StatusFatura
     Cancelada = 3
 }
 
-public class Fatura : ITenantEntity
+public class Fatura : ITenantEntity, ICobrancaGateway
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
     public Guid TenantId { get; set; }
@@ -69,6 +69,19 @@ public class Fatura : ITenantEntity
     public DateTimeOffset CriadaEm { get; set; }
     public DateTimeOffset? AtualizadaEm { get; set; }
 
+
+    // ---- Cobrança no gateway (E3/E9) ----
+    public StatusCobrancaGateway GatewayStatus { get; set; }
+    public Guid? GatewayContaId { get; set; }
+    public string? GatewayCobrancaId { get; set; }
+    public string? GatewayLink { get; set; }
+    public string? GatewayBoletoUrl { get; set; }
+    public string? GatewayLinhaDigitavel { get; set; }
+    public string? GatewayPixCopiaCola { get; set; }
+    public string? GatewayPixQrCode { get; set; }
+    public DateTimeOffset? GatewayUltimoEventoEm { get; set; }
+    public string? GatewayErro { get; set; }
+
     public bool Vencida(DateOnly hoje) => Status == StatusFatura.Aberta && Vencimento < hoje;
 }
 
@@ -76,7 +89,13 @@ public class Fatura : ITenantEntity
 public class AcessoSuporte
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
-    public Guid TenantId { get; set; }
+    /// <summary>Cliente acessado (nulo quando o alvo é o painel de um canal).</summary>
+    public Guid? TenantId { get; set; }
+    /// <summary>Canal acessado (Owner entrando no painel de um revendedor).</summary>
+    public Guid? CanalAlvoId { get; set; }
+    /// <summary>Canal de origem (revendedor/parceiro). Nulo quando o acesso parte da plataforma.</summary>
+    public Guid? CanalId { get; set; }
+    public NivelSuporte NivelOrigem { get; set; } = NivelSuporte.Plataforma;
     public Guid UsuarioId { get; set; }
     public string UsuarioNome { get; set; } = "";
     public string Motivo { get; set; } = "";

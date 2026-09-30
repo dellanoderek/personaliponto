@@ -1,0 +1,14 @@
+@using PersonaliPonto.Modules.SaaS.Domain
+@using PersonaliPonto.Modules.SaaS.Services
+@switch (FaturamentoCanalService.Celula(Fatura, DateOnly.FromDateTime(DateTime.Today)))
+{
+    case CelulaFatura.Paga: <span class="badge b-verde">paga</span> break;
+    case CelulaFatura.Vencida: <span class="badge b-vermelho">vencida</span> break;
+    case CelulaFatura.NaoCobrada: <span class="badge b-cinza">não cobrada</span> break;
+    case CelulaFatura.Cancelada: <span class="badge b-cinza">cancelada</span> break;
+    default: <span class="badge b-azul">em aberto</span> break;
+}
+
+@code {
+    [Parameter, EditorRequired] public FaturaCanal Fatura { get; set; } = default!;
+}

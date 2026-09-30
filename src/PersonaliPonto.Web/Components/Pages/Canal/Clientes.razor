@@ -1,0 +1,299 @@
+@page "/canal/clientes"
+@attribute [Authorize(Policy = Politicas.Canal)]
+@inherits PaginaCanal
+@using PersonaliPonto.Modules.SaaS.Domain
+@using PersonaliPonto.Modules.SaaS.Services
+
+<PageTitle>Clientes do canal — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="@(EhRevendedor ? "Revendedor" : "Parceiro")" Titulo="Clientes"
+           Descricao="@(EhRevendedor ? "Seus clientes diretos e os clientes dos seus parceiros. Cadastro e financeiro; dados de ponto apenas pelo modo suporte auditado." : "Sua carteira de clientes. Cadastro e financeiro; dados de ponto apenas pelo modo suporte auditado.")">
+    <Acoes>
+        @if (EhAdminCanal)
+        {
+            <button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo cliente</button>
+        }
+    </Acoes>
+</Cabecalho>
+
+@if (!string.IsNullOrEmpty(Erro))
+{
+    <div class="alerta erro" style="margin-bottom:16px"><Icone Nome="alerta" /><div>@Erro</div></div>
+}
+@if (_criado is not null)
+{
+    <div class="alerta sucesso" style="margin-bottom:16px"><Icone Nome="chave" /><div>Acesso do administrador: <b>@_criado.Value.Login</b> · senha temporária <b class="mono" style="font-size:14px">@_criado.Value.Senha</b> — envie ao cliente; ela não será exibida novamente.</div></div>
+}
+
+<div class="card">
+    <div class="card-cab">
+        <div class="filtros">
+            <div class="campo" style="min-width:260px"><label>Buscar</label><input type="search" placeholder="Razão social ou CNPJ" @bind="_busca" @bind:event="oninput" /></div>
+            @if (EhRevendedor)
+            {
+                <div class="campo">
+                    <label>Canal dono</label>
+                    <select @bind="_filtroCanal">
+                        <option value="">Todos</option>
+                        @foreach (var c in _canais)
+                        {
+                            <option value="@c.Id">@c.NomeMarca</option>
+                        }
+                    </select>
+                </div>
+            }
+        </div>
+        <span class="small muted">@Filtrados.Count() clientes</span>
+    </div>
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead><tr><th>Cliente</th><th>Canal dono</th><th>Situação</th><th class="num">Valor</th><th class="num">Func.</th><th>Fornecedor</th><th class="num">Vencido</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var c in Filtrados)
+                {
+                    <tr>
+                        <td><div style="font-weight:600">@c.RazaoSocial</div><div class="small muted">@Documentos.FormatarCnpj(c.Cnpj)</div></td>
+                        <td class="small">@NomeCanal(c.TenantId)</td>
+                        <td><StatusCliente Status="c.Status" /></td>
+                        <td class="num">@Formato.Moeda(c.Valor)</td>
+                        <td class="num">@c.Funcionarios</td>
+                        <td class="small">@c.Fornecedor</td>
+                        <td class="num" style="@(c.EmAberto > 0 ? "color:var(--vermelho);font-weight:700" : "")">@(c.EmAberto > 0 ? Formato.Moeda(c.EmAberto) : "—")</td>
+                        <td class="right"><button class="btn btn-secundario btn-sm" @onclick="() => Abrir(c.TenantId)">Gerenciar</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_lista.Count == 0)
+    {
+        <Vazio Texto="Nenhum cliente na carteira." Icone="predio" />
+    }
+</div>
+
+<Modal @bind-Aberto="_modalNovo" Titulo="Novo cliente" Grande="true">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-8"><label>Razão social</label><input type="text" @bind="_novo.RazaoSocial" /></div>
+            <div class="campo c-4"><label>CNPJ/CPF</label><input type="text" @bind="_novo.Cnpj" /></div>
+            <div class="campo c-4"><label>Telefone</label><input type="tel" @bind="_novo.Telefone" /></div>
+            <div class="campo c-8"><label>Local de prestação (matriz)</label><input type="text" maxlength="100" @bind="_novo.LocalPrestacao" /></div>
+            <div class="campo c-3"><label>Valor mensal (R$)</label><input type="number" step="0.01" @bind="_novo.ValorMensal" /></div>
+            <div class="campo c-3"><label>Funcionários</label><input type="number" @bind="_novo.FuncionariosContratados" /></div>
+            <div class="campo c-3"><label>Dia de vencimento</label><input type="number" min="1" max="28" @bind="_novo.DiaVencimento" /></div>
+            <div class="campo c-3">
+                <label>Tipo de entidade</label>
+                <select @bind="_novo.TipoEntidade">
+                    <option value="@TipoEntidade.Privada">Empresa privada</option>
+                    <option value="@TipoEntidade.Publica">Entidade pública</option>
+                </select>
+            </div>
+            @if (EhRevendedor)
+            {
+                <div class="campo c-4">
+                    <label>Canal dono</label>
+                    <select @bind="_novo.CanalDonoId">
+                        @foreach (var c in _canais)
+                        {
+                            <option value="@c.Id">@c.NomeMarca@(c.Tipo == TipoCanal.Parceiro ? " (parceiro)" : "")</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="campo c-4"><label>Fornecedor / origem</label><input type="text" placeholder="@FornecedorSugerido" @bind="_novo.Fornecedor" /></div>
+            <div class="c-4 linha" style="align-self:end"><label class="checkbox"><input type="checkbox" @bind="_novo.EmTeste" /> Período de teste (15 dias)</label></div>
+            <div class="c-12"><h3 class="mt">Administrador da empresa</h3></div>
+            <div class="campo c-5"><label>Nome</label><input type="text" @bind="_novo.NomeAdmin" /></div>
+            <div class="campo c-4"><label>E-mail</label><input type="email" @bind="_novo.EmailAdmin" /></div>
+            <div class="campo c-3"><label>CPF</label><input type="text" @bind="_novo.CpfAdmin" /></div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalNovo = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Criar">Cadastrar cliente</button>
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modalDetalhe" Titulo="@(_sel?.RazaoSocial ?? "Cliente")" Grande="true">
+    <ChildContent>
+        @if (_sel is not null)
+        {
+            <div class="linha entre" style="margin-bottom:14px">
+                <div class="linha"><StatusCliente Status="_selStatus" /><span class="small muted">@Documentos.FormatarCnpj(_sel.Cnpj) · desde @_sel.Inicio.ToString("MM/yyyy") · @NomeCanal(_sel.TenantId)</span></div>
+                @if (EhAdminCanal)
+                {
+                    <div class="linha">
+                        @if (_selStatus is TenantStatus.Suspenso or TenantStatus.Inadimplente or TenantStatus.Teste)
+                        {
+                            <button class="btn btn-sucesso btn-sm" @onclick="Ativar">Ativar</button>
+                        }
+                        @if (_selStatus is TenantStatus.Ativo or TenantStatus.Inadimplente or TenantStatus.Teste)
+                        {
+                            <button class="btn btn-perigo btn-sm" @onclick="Suspender">Suspender uso</button>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="form-grade">
+                <div class="campo c-3"><label>Valor mensal</label><input type="number" step="0.01" @bind="_sel.ValorMensal" disabled="@(!EhAdminCanal)" /></div>
+                <div class="campo c-3"><label>Funcionários</label><input type="number" @bind="_sel.FuncionariosContratados" disabled="@(!EhAdminCanal)" /></div>
+                <div class="campo c-3"><label>Fornecedor</label><input type="text" @bind="_sel.Fornecedor" disabled="@(!EhAdminCanal)" /></div>
+                <div class="campo c-3"><label>Vencimento (dia)</label><input type="number" min="1" max="28" @bind="_sel.DiaVencimento" disabled="@(!EhAdminCanal)" /></div>
+                <div class="campo c-4"><label>Telefone</label><input type="tel" @bind="_sel.Telefone" disabled="@(!EhAdminCanal)" /></div>
+                <div class="campo c-8"><label>Observações</label><input type="text" @bind="_sel.Observacoes" disabled="@(!EhAdminCanal)" /></div>
+            </div>
+            @if (EhAdminCanal)
+            {
+                <div class="linha mt"><button class="btn btn-primario" disabled="@Ocupado" @onclick="SalvarContrato">Salvar contrato</button></div>
+            }
+
+            <div class="grade grade-2 mt-lg">
+                @if (EhAdminCanal)
+                {
+                    <div class="card suave card-corpo pilha">
+                        <h3>Acesso do administrador</h3>
+                        <div class="linha"><input type="email" placeholder="e-mail" @bind="_adminEmail" /><input type="text" placeholder="nome" @bind="_adminNome" /></div>
+                        <button class="btn btn-secundario" disabled="@Ocupado" @onclick="CriarAdmin">Criar / redefinir acesso</button>
+                    </div>
+                }
+                <div class="card suave card-corpo">
+                    <h3>Acessar como suporte</h3>
+                    <form method="post" action="/canal/suporte/entrar" class="pilha" data-enhance="false" style="gap:8px;margin-top:8px">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="tenantId" value="@_sel.TenantId" />
+                        <input type="text" name="motivo" placeholder="Motivo (ex.: chamado 123 — ajuste de jornada)" required minlength="10" />
+                        <button class="btn btn-marinho" type="submit"><Icone Nome="escudo" />Entrar no ambiente do cliente</button>
+                    </form>
+                    <p class="small muted" style="margin-top:6px">O acesso é registrado com motivo, horário e IP e fica visível para a plataforma.</p>
+                </div>
+            </div>
+        }
+    </ChildContent>
+</Modal>
+
+<Modal @bind-Aberto="_modalMotivo" Titulo="Suspender uso do cliente">
+    <ChildContent><div class="campo"><label>Motivo</label><input type="text" @bind="_motivo" /></div></ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalMotivo = false">Voltar</button>
+        <button class="btn btn-perigo" disabled="@Ocupado" @onclick="ConfirmarSuspensao">Confirmar</button>
+    </Rodape>
+</Modal>
+
+@code {
+    [SupplyParameterFromQuery] public string? Erro { get; set; }
+    [SupplyParameterFromQuery(Name = "novo")] public int? NovoQuery { get; set; }
+
+    private List<LinhaGrade> _lista = [];
+    private List<Modules.SaaS.Domain.Canal> _canais = [];
+    private Dictionary<Guid, Guid> _donoPorTenant = [];
+    private string _busca = "";
+    private Guid? _filtroCanal;
+    private bool _modalNovo, _modalDetalhe, _modalMotivo;
+    private NovoForm _novo = new();
+    private Assinatura? _sel;
+    private TenantStatus _selStatus;
+    private (string Login, string Senha)? _criado;
+    private string _adminEmail = "", _adminNome = "", _motivo = "";
+
+    private sealed class NovoForm
+    {
+        public string RazaoSocial { get; set; } = "";
+        public string Cnpj { get; set; } = "";
+        public string? Telefone { get; set; }
+        public string EmailAdmin { get; set; } = "";
+        public string NomeAdmin { get; set; } = "";
+        public string? CpfAdmin { get; set; }
+        public decimal ValorMensal { get; set; }
+        public int FuncionariosContratados { get; set; }
+        public string? Fornecedor { get; set; }
+        public int DiaVencimento { get; set; } = 10;
+        public string LocalPrestacao { get; set; } = "";
+        public bool EmTeste { get; set; } = true;
+        public Guid? CanalDonoId { get; set; }
+        public TipoEntidade TipoEntidade { get; set; }
+    }
+
+    private string FornecedorSugerido => ClienteService.FornecedorPadrao(_canais.FirstOrDefault(c => c.Id == (_novo.CanalDonoId ?? CanalId)) ?? Canal ?? new Modules.SaaS.Domain.Canal());
+
+    private string NomeCanal(Guid tenantId) =>
+        _donoPorTenant.TryGetValue(tenantId, out var c) ? _canais.FirstOrDefault(x => x.Id == c)?.NomeMarca ?? "" : "";
+
+    private IEnumerable<LinhaGrade> Filtrados => _lista
+        .Where(c => _filtroCanal is null || _donoPorTenant.GetValueOrDefault(c.TenantId) == _filtroCanal)
+        .Where(c => string.IsNullOrWhiteSpace(_busca) || c.RazaoSocial.Contains(_busca, StringComparison.OrdinalIgnoreCase) || c.Cnpj.Contains(Documentos.Normalizar(_busca)));
+
+    protected override async Task CarregarAsync()
+    {
+        _canais = await Svc<CanalService>().CanaisDaHierarquiaAsync(default);
+        await Recarregar();
+        if (NovoQuery == 1 && EhAdminCanal) Novo();
+    }
+
+    private async Task Recarregar()
+    {
+        _lista = (await Svc<PainelPlataformaService>().GradeAsync(Hoje.Year, null, null, default)).ToList();
+        _donoPorTenant = await Db.Tenants.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.CanalDonoId);
+    }
+
+    private void Novo() { _novo = new NovoForm { CanalDonoId = CanalId }; _modalNovo = true; }
+
+    private async Task Criar()
+    {
+        var ok = await Executar(async () =>
+        {
+            var n = _novo;
+            var r = await Svc<ClienteService>().CadastrarAsync(new NovoClienteRequest(n.RazaoSocial, n.Cnpj, n.Telefone, n.EmailAdmin, n.NomeAdmin, n.CpfAdmin,
+                n.ValorMensal, n.FuncionariosContratados, 0m, n.Fornecedor, n.DiaVencimento, null, n.LocalPrestacao, n.EmTeste,
+                CanalDonoId: n.CanalDonoId, TipoEntidade: n.TipoEntidade), default);
+            _criado = r.SenhaTemporaria is null ? null : (r.EmailAdmin!, r.SenhaTemporaria);
+            await Svc<FaturamentoService>().GerarCompetenciaAsync(InicioMes(Hoje), default);
+        }, "Cliente cadastrado.");
+        if (ok) { _modalNovo = false; await Recarregar(); }
+    }
+
+    private async Task Abrir(Guid tenantId)
+    {
+        _sel = await Db.Assinaturas.AsNoTracking().FirstAsync(a => a.TenantId == tenantId);
+        _selStatus = await Db.Tenants.AsNoTracking().Where(t => t.Id == tenantId).Select(t => t.Status).FirstAsync();
+        _adminEmail = _sel.Email ?? "";
+        _adminNome = "Administrador";
+        _modalDetalhe = true;
+    }
+
+    private async Task SalvarContrato()
+    {
+        var s = _sel!;
+        if (await Executar(() => Svc<ClienteService>().AtualizarContratoAsync(s.TenantId, s.ValorMensal, s.FuncionariosContratados, s.CustoMensal, s.Fornecedor,
+                s.DiaVencimento, s.BloqueioAutomatico, s.DiasTolerancia, s.DiasParaBloqueio, s.Telefone, s.Observacoes, default), "Contrato atualizado."))
+            await Recarregar();
+    }
+
+    private async Task Ativar()
+    {
+        if (await Executar(() => Svc<ClienteService>().AtivarAsync(_sel!.TenantId, default), "Cliente ativado.")) await Reabrir();
+    }
+
+    private void Suspender() { _motivo = ""; _modalMotivo = true; }
+
+    private async Task ConfirmarSuspensao()
+    {
+        if (await Executar(() => Svc<ClienteService>().SuspenderAsync(_sel!.TenantId, _motivo, default), "Situação do cliente atualizada."))
+        {
+            _modalMotivo = false;
+            await Reabrir();
+        }
+    }
+
+    private async Task Reabrir()
+    {
+        await Recarregar();
+        await Abrir(_sel!.TenantId);
+    }
+
+    private Task CriarAdmin() => Executar(async () =>
+    {
+        var senha = await Svc<ClienteService>().CriarAdministradorAsync(_sel!.TenantId, _adminEmail, _adminNome, null, default);
+        _criado = (_adminEmail, senha);
+        _modalDetalhe = false;
+    }, "Acesso criado.");
+}

@@ -8,7 +8,7 @@ public sealed class MenuPage : ContentPage
 {
     private readonly Sessao _sessao;
     private readonly Label _nome = Ui.L("", 18, Colors.White, true);
-    private readonly Label _empresa = Ui.L("", 13, Color.FromArgb("#C9D6EA"));
+    private readonly Label _empresa = Ui.L("", 13, Color.FromArgb("#D6D1C4"));
     private readonly Label _iniciais = Ui.L("", 26, Ui.Azul, true, TextAlignment.Center);
 
     public MenuPage(Sessao sessao)

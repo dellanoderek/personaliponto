@@ -481,7 +481,6 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# Local dev\n.local/\n*.pfx\nappsettings.*.local.json\n
 
 # Local dev
 .local/

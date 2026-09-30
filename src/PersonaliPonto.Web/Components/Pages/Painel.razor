@@ -31,6 +31,14 @@
     </Acoes>
 </Cabecalho>
 
+@if (_canalSuspenso)
+{
+    <div class="alerta aviso" style="margin-bottom:16px">
+        <Icone Nome="alerta" />
+        <div><b>Aviso do fornecedor:</b> a revenda responsável pela sua conta está com pendência junto à plataforma. Nada muda na sua operação: a marcação de ponto, os comprovantes, o espelho e os arquivos AFD/AEJ continuam disponíveis normalmente. Em caso de dúvida, contate seu fornecedor.</div>
+    </div>
+}
+
 @if (_ind is null)
 {
     <Carregando Texto="Calculando indicadores..." />
@@ -48,7 +56,7 @@ else
         <div class="card span-2">
             <div class="card-cab"><h2>Extras, atrasos e faltas por dia</h2><span class="small muted">@_ind.Inicio.ToString("dd/MM") a @_ind.Fim.ToString("dd/MM")</span></div>
             <div class="card-corpo">
-                <GraficoBarras Pontos="_serie" Series="@(["Extras", "Atrasos", "Faltas"])" Cores="@(["#1166d6", "#21b8ef", "#c0392b"])" Formatar="v => Formato.Hhmm((int)v)" Titulo="Minutos por dia" />
+                <GraficoBarras Pontos="_serie" Series="@(["Extras", "Atrasos", "Faltas"])" Cores="@(["#c9a54c", "#4a4a52", "#c0392b"])" Formatar="v => Formato.Hhmm((int)v)" Titulo="Minutos por dia" />
             </div>
         </div>
         <div class="card marinho">
@@ -162,6 +170,7 @@ else
     private List<Estabelecimento> _estabelecimentos = [];
     private NtpClock _ntp = default!;
     private bool _certIcp;
+    private bool _canalSuspenso;
     private string? _inpi;
 
     protected override async Task CarregarAsync()
@@ -176,6 +185,7 @@ else
             Nav.NavigateTo("/meu-ponto");
             return;
         }
+        if (TenantId is { } tid) _canalSuspenso = await Svc<Infrastructure.Tenancy.SituacaoCanalCliente>().CanalSuspensoAsync(tid, default);
         _ntp = Svc<NtpClock>();
         _certIcp = Svc<AssinaturaDigital>().CertificadoIcpBrasil;
         _inpi = Svc<IOptions<RepPOptions>>().Value.NumeroRegistroInpi;

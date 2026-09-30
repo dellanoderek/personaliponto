@@ -1,0 +1,139 @@
+@page "/plataforma/revendedores"
+@attribute [Authorize(Policy = Politicas.Plataforma)]
+@inherits PaginaPlataforma
+@using PersonaliPonto.Modules.SaaS.Domain
+@using PersonaliPonto.Modules.SaaS.Services
+@using PersonaliPonto.Web.Components.Pages.Canal
+
+<PageTitle>Revendedores — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Super Admin" Titulo="Revendedores" Descricao="Canais de revenda da plataforma. Cada revendedor tem marca própria, administra a própria carteira e pode ter parceiros (máximo de 3 níveis).">
+    <Acoes>
+        @if (TemPapel(Roles.SuperAdmin))
+        {
+            <button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo revendedor</button>
+        }
+    </Acoes>
+</Cabecalho>
+
+@if (!string.IsNullOrEmpty(Erro))
+{
+    <div class="alerta erro" style="margin-bottom:16px"><Icone Nome="alerta" /><div>@Erro</div></div>
+}
+@if (_criado is not null)
+{
+    <div class="alerta sucesso" style="margin-bottom:16px"><Icone Nome="chave" /><div>Acesso do administrador do revendedor: <b>@_criado.EmailAdmin</b> · senha temporária <b class="mono" style="font-size:14px">@_criado.SenhaTemporaria</b> — ela não será exibida novamente.</div></div>
+}
+
+<div class="card">
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead><tr><th>Revendedor</th><th>Situação</th><th class="num">Parceiros</th><th class="num">Clientes</th><th class="num">Ativos</th><th class="num">Receita dos clientes</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var r in _lista)
+                {
+                    <tr>
+                        <td><div style="font-weight:600">@r.NomeMarca</div><div class="small muted">@r.RazaoSocial · @Documentos.FormatarCnpj(r.Cnpj)</div></td>
+                        <td><SituacaoCanal Status="r.Status" /></td>
+                        <td class="num">@r.Parceiros</td>
+                        <td class="num">@r.Clientes</td>
+                        <td class="num">@r.ClientesAtivos</td>
+                        <td class="num">@Formato.Moeda(r.ReceitaMensal)</td>
+                        <td class="right"><button class="btn btn-secundario btn-sm" @onclick="() => Abrir(r)">Gerenciar</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_lista.Count == 0)
+    {
+        <Vazio Texto="Nenhum revendedor cadastrado." Icone="globo" />
+    }
+</div>
+
+<Modal @bind-Aberto="_modalNovo" Titulo="Novo revendedor" Grande="true">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-8"><label>Razão social</label><input type="text" @bind="_novo.RazaoSocial" /></div>
+            <div class="campo c-4"><label>CNPJ/CPF</label><input type="text" @bind="_novo.Cnpj" /></div>
+            <div class="campo c-6"><label>Nome da marca</label><input type="text" maxlength="80" @bind="_novo.NomeMarca" /></div>
+            <div class="campo c-6"><label>Telefone</label><input type="tel" @bind="_novo.Telefone" /></div>
+            <div class="c-12"><h3 class="mt">Administrador do revendedor (Super Admin do canal)</h3></div>
+            <div class="campo c-5"><label>Nome</label><input type="text" @bind="_novo.NomeAdmin" /></div>
+            <div class="campo c-4"><label>E-mail</label><input type="email" @bind="_novo.EmailAdmin" /></div>
+            <div class="campo c-3"><label>CPF</label><input type="text" @bind="_novo.CpfAdmin" /></div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modalNovo = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Criar">Cadastrar revendedor</button>
+    </Rodape>
+</Modal>
+
+<Modal @bind-Aberto="_modalDetalhe" Titulo="@(_sel?.NomeMarca ?? "Revendedor")">
+    <ChildContent>
+        @if (_sel is not null)
+        {
+            <div class="pilha">
+                @if (TemPapel(Roles.SuperAdmin))
+                {
+                    <div class="campo">
+                        <label>Situação comercial</label>
+                        <select value="@_sel.Status" @onchange="e => AlterarStatus(e.Value?.ToString())">
+                            @foreach (var s in Enum.GetValues<StatusCanal>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                    </div>
+                }
+                <div class="card suave card-corpo">
+                    <h3>Entrar no painel do revendedor</h3>
+                    <form method="post" action="/plataforma/suporte/canal/entrar" class="pilha" data-enhance="false" style="gap:8px;margin-top:8px">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="canalId" value="@_sel.Id" />
+                        <input type="text" name="motivo" placeholder="Motivo (ex.: chamado 123 — configuração de parceiro)" required minlength="10" />
+                        <button class="btn btn-marinho" type="submit"><Icone Nome="escudo" />Entrar em modo suporte</button>
+                    </form>
+                    <p class="small muted" style="margin-top:6px">O acesso é registrado com motivo, horário e IP.</p>
+                </div>
+            </div>
+        }
+    </ChildContent>
+</Modal>
+
+@code {
+    [SupplyParameterFromQuery] public string? Erro { get; set; }
+
+    private List<LinhaCanal> _lista = [];
+    private bool _modalNovo, _modalDetalhe;
+    private Parceiros.FormCanal _novo = new();
+    private CanalCriado? _criado;
+    private LinhaCanal? _sel;
+
+    protected override async Task CarregarAsync() =>
+        _lista = (await Svc<CanalService>().ListarFilhosAsync(Modules.SaaS.Domain.Canal.OwnerRaizId, default)).ToList();
+
+    private void Novo() { _novo = new(); _modalNovo = true; }
+
+    private async Task Criar()
+    {
+        if (await Executar(async () => _criado = await Svc<CanalService>().CriarAsync(_novo.Request(), default), "Revendedor cadastrado."))
+        {
+            _modalNovo = false;
+            await CarregarAsync();
+        }
+    }
+
+    private void Abrir(LinhaCanal r) { _sel = r; _modalDetalhe = true; }
+
+    private async Task AlterarStatus(string? valor)
+    {
+        if (_sel is null || !Enum.TryParse<StatusCanal>(valor, out var s)) return;
+        if (await Executar(() => Svc<CanalService>().AlterarStatusAsync(_sel.Id, s, default), "Situação atualizada."))
+        {
+            await CarregarAsync();
+            _sel = _lista.FirstOrDefault(x => x.Id == _sel.Id);
+        }
+    }
+}

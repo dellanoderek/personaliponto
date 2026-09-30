@@ -1,0 +1,362 @@
+@page "/plataforma/faturamento-canais"
+@attribute [Authorize(Policy = Politicas.Plataforma)]
+@inherits PaginaPlataforma
+@using PersonaliPonto.Modules.SaaS.Domain
+@using PersonaliPonto.Modules.SaaS.Services
+@using PersonaliPonto.Infrastructure.Tenancy
+@using PersonaliPonto.Infrastructure.Pagamentos
+@inject Microsoft.Extensions.Options.IOptions<AsaasOptions> Asaas
+
+<PageTitle>Faturamento de canais — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="Super Admin" Titulo="Faturamento de canais"
+           Descricao="Cobrança por uso dos revendedores (empresas ativas + funcionários em faixas marginais, mínimo mensal), Premium e serviços avulsos. Cobrança pelo Asaas com baixa automática (webhook); baixa manual continua disponível.">
+    <Acoes>
+        <div class="campo" style="min-width:100px"><select @bind="_ano" @bind:after="Recarregar">@for (var a = Hoje.Year - 2; a <= Hoje.Year + 1; a++) { <option value="@a">@a</option> }</select></div>
+        <button class="btn btn-secundario" disabled="@Ocupado" @onclick="Processar">Apurar e faturar @InicioMes(Hoje).AddMonths(-1).ToString("MM/yyyy")</button>
+        <button class="btn btn-secundario" disabled="@Ocupado" @onclick="Regua">Aplicar régua de canais</button>
+    </Acoes>
+</Cabecalho>
+
+<div class="alerta @(Asaas.Value.Owner.Configurada ? "sucesso" : "aviso")" style="margin-bottom:16px" data-asaas-owner="@(Asaas.Value.Owner.Configurada ? "ativo" : "inativo")">
+    <Icone Nome="@(Asaas.Value.Owner.Configurada ? "check" : "info")" />
+    <div>
+        @if (Asaas.Value.Owner.Configurada)
+        {
+            <span>Asaas da plataforma ativo (@(Asaas.Value.Sandbox ? "Sandbox" : "Produção")). Faturas novas geram cobrança Pix/boleto/cartão automaticamente@(Asaas.Value.NotaFiscal.Habilitada ? ", com NFS-e agendada" : "").
+            @if (string.IsNullOrWhiteSpace(Asaas.Value.Owner.WebhookToken)) { <b> Configure Asaas:Owner:WebhookToken para receber as baixas automáticas.</b> }</span>
+        }
+        else
+        {
+            <span>Asaas da plataforma não configurado (Asaas:Owner:ChaveApi): as faturas ficam só para baixa manual.</span>
+        }
+    </div>
+</div>
+
+<div class="abas">
+    @foreach (var (id, nome) in Abas)
+    {
+        <button class="@(_aba == id ? "ativa" : "")" @onclick="() => _aba = id">@nome</button>
+    }
+</div>
+
+@if (_aba == "grade")
+{
+    <div class="card">
+        <div class="card-cab">
+            <h2>Revendedores × competências</h2>
+            <div class="legenda">
+                <span><span class="fat-cel fat-paga">✓</span> pago</span>
+                <span><span class="fat-cel fat-aberta">•</span> em aberto</span>
+                <span><span class="fat-cel fat-vencida">!</span> vencido</span>
+                <span><span class="fat-cel fat-naocobrada">x</span> não cobrado</span>
+            </div>
+        </div>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead>
+                    <tr>
+                        <th>Revendedor</th>
+                        @for (var m = 1; m <= 12; m++)
+                        {
+                            <th class="center" style="padding:10px 2px">@(new DateTime(_ano, m, 1).ToString("MMM", _br))</th>
+                        }
+                        <th class="num">Vencido</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _grade)
+                    {
+                        <tr>
+                            <td style="min-width:220px">
+                                <div style="font-weight:600">@c.NomeMarca</div>
+                                <div class="small muted linha" style="gap:6px">@Documentos.FormatarCnpj(c.Cnpj) <SituacaoCanal Status="c.Status" /></div>
+                            </td>
+                            @foreach (var (comp, (estado, id, valor)) in c.Meses.OrderBy(x => x.Key))
+                            {
+                                <td class="center" style="padding:6px 2px">
+                                    <button class="fat-cel @Classe(estado)" disabled="@(id is null)" title="@($"{comp:MM/yyyy}: {Formato.Moeda(valor)}")" @onclick="() => Abrir(c, id)">@Simbolo(estado)</button>
+                                </td>
+                            }
+                            <td class="num nowrap" style="@(c.EmAberto > 0 ? "color:var(--vermelho);font-weight:700" : "")">@(c.EmAberto > 0 ? Formato.Moeda(c.EmAberto) : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_grade.Count == 0)
+        {
+            <Vazio Texto="Nenhum revendedor cadastrado." Icone="globo" />
+        }
+    </div>
+}
+else if (_aba == "apuracao")
+{
+    <div class="card">
+        <div class="card-cab">
+            <div class="filtros">
+                <div class="campo" style="min-width:220px">
+                    <label>Revendedor</label>
+                    <select @bind="_apCanal" @bind:after="CarregarApuracao">
+                        <option value="">Selecione</option>
+                        @foreach (var c in _grade) { <option value="@c.CanalId">@c.NomeMarca</option> }
+                    </select>
+                </div>
+                <div class="campo"><label>Competência</label><input type="month" @bind="_apComp" @bind:format="yyyy-MM" @bind:after="CarregarApuracao" /></div>
+            </div>
+        </div>
+        @if (_apuracao is not null)
+        {
+            <div class="grade grade-3" style="padding:16px">
+                <Kpi Rotulo="Empresas ativas" Valor="@_apuracao.EmpresasAtivas.ToString()" />
+                <Kpi Rotulo="Funcionários ativos" Valor="@_apuracao.FuncionariosAtivos.ToString("N0")" />
+                <Kpi Rotulo="Apurada em" Valor="@_apuracao.GeradaEm.ToLocalTime().ToString("dd/MM/yyyy")" Detalhe="snapshot imutável" />
+            </div>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>Cliente</th><th>Canal dono</th><th>Tipo</th><th>Situação</th><th>Empresa ativa</th><th class="num">Funcionários ativos</th></tr></thead>
+                    <tbody>
+                        @foreach (var d in _detalhes)
+                        {
+                            <tr>
+                                <td>@d.NomeCliente</td>
+                                <td>@(_nomesCanais.GetValueOrDefault(d.CanalDonoId) ?? "—")</td>
+                                <td>@(d.TipoEntidade == TipoEntidade.Publica ? "pública" : "privada")</td>
+                                <td><StatusCliente Status="d.StatusCliente" /></td>
+                                <td>@(d.EmpresaAtiva ? "sim" : "não")</td>
+                                <td class="num">@d.FuncionariosAtivos.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (_apCanal is not null)
+        {
+            <Vazio Texto="Competência ainda não apurada para este revendedor." Icone="relatorio" />
+        }
+    </div>
+}
+else if (_aba == "condicoes")
+{
+    <div class="card">
+        <div class="card-cab"><h2>Isenções e serviços avulsos</h2></div>
+        <div class="tabela-wrap">
+            <table class="tabela">
+                <thead><tr><th>Revendedor</th><th>Premium</th><th>Premium isento até</th><th>App próprio</th><th>Desde</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in _condicoes)
+                    {
+                        <tr>
+                            <td><div style="font-weight:600">@c.NomeMarca</div><div class="small muted">desde @FaturamentoCanalService.DataLocal(c.CriadoEm).ToString("dd/MM/yyyy")</div></td>
+                            <td>@(_premiumAtivo.Contains(c.Id) ? "ativo" : "—")</td>
+                            <td>
+                                <div class="linha" style="gap:6px">
+                                    <input type="date" @bind="c.PremiumIsentoAte" />
+                                    <button class="btn btn-sm btn-fantasma" title="Fundador: 24 meses" @onclick="() => c.PremiumIsentoAte = Hoje.AddMonths(24)">24m</button>
+                                </div>
+                            </td>
+                            <td><label class="checkbox"><input type="checkbox" @bind="c.AppProprioAtivo" /> R$ 1.500 + R$ 200/mês</label></td>
+                            <td><input type="date" @bind="c.AppProprioDesde" /></td>
+                            <td class="right"><button class="btn btn-sm btn-primario" disabled="@Ocupado" @onclick="() => SalvarCondicoes(c)">Salvar</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else
+{
+    <div class="grade grade-2">
+        <div class="card">
+            <div class="card-cab"><h2>Versões da tabela de preço</h2></div>
+            <div class="tabela-wrap">
+                <table class="tabela">
+                    <thead><tr><th>Vigência</th><th class="num">Empresa</th><th class="num">Faixas (R$/func.)</th><th class="num">Mínimo</th><th class="num">Premium</th><th class="num">App próprio</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in _tabelas)
+                        {
+                            <tr>
+                                <td>a partir de @t.VigenciaInicio.ToString("MM/yyyy")</td>
+                                <td class="num">@Formato.Moeda(t.PrecoEmpresaAtiva)</td>
+                                <td class="num small">@Formato.Moeda(t.Faixa1Preco) até @t.Faixa1Ate.ToString("N0") · @Formato.Moeda(t.Faixa2Preco) até @t.Faixa2Ate.ToString("N0") · @Formato.Moeda(t.Faixa3Preco) acima</td>
+                                <td class="num">@Formato.Moeda(t.MinimoMensal)</td>
+                                <td class="num">@Formato.Moeda(t.PrecoPremium)</td>
+                                <td class="num small">@Formato.Moeda(t.AppProprioImplantacao) + @Formato.Moeda(t.AppProprioMensal)/mês</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-cab"><h2>Nova versão</h2></div>
+            <div class="form-grade" style="padding:16px">
+                <div class="campo c-6"><label>Vigência (competência)</label><input type="month" @bind="_nova.VigenciaInicio" @bind:format="yyyy-MM" /></div>
+                <div class="campo c-6"><label>Por empresa ativa</label><input type="number" step="0.01" @bind="_nova.PrecoEmpresaAtiva" /></div>
+                <div class="campo c-4"><label>Faixa 1 até</label><input type="number" @bind="_nova.Faixa1Ate" /></div>
+                <div class="campo c-4"><label>Preço faixa 1</label><input type="number" step="0.01" @bind="_nova.Faixa1Preco" /></div>
+                <div class="campo c-4"><label>Faixa 2 até</label><input type="number" @bind="_nova.Faixa2Ate" /></div>
+                <div class="campo c-4"><label>Preço faixa 2</label><input type="number" step="0.01" @bind="_nova.Faixa2Preco" /></div>
+                <div class="campo c-4"><label>Preço acima</label><input type="number" step="0.01" @bind="_nova.Faixa3Preco" /></div>
+                <div class="campo c-4"><label>Mínimo mensal</label><input type="number" step="0.01" @bind="_nova.MinimoMensal" /></div>
+                <div class="campo c-4"><label>Premium</label><input type="number" step="0.01" @bind="_nova.PrecoPremium" /></div>
+                <div class="campo c-4"><label>App próprio (implantação)</label><input type="number" step="0.01" @bind="_nova.AppProprioImplantacao" /></div>
+                <div class="campo c-4"><label>App próprio (mensal)</label><input type="number" step="0.01" @bind="_nova.AppProprioMensal" /></div>
+                <div class="campo c-12"><label>Observação</label><input type="text" maxlength="300" @bind="_nova.Observacao" /></div>
+                <div class="c-12"><button class="btn btn-primario" disabled="@Ocupado" @onclick="CriarTabela">Criar versão</button></div>
+            </div>
+        </div>
+    </div>
+}
+
+<Modal @bind-Aberto="_modal" Titulo="@($"Fatura {_fatura?.Competencia:MM/yyyy} — {_canalSel?.NomeMarca}")">
+    <ChildContent>
+        @if (_fatura is not null)
+        {
+            <DetalheFaturaCanal Fatura="_fatura" />
+            @if (_fatura.Status is StatusFatura.Aberta)
+            {
+                <div class="form-grade mt">
+                    <div class="campo c-4"><label>Data do pagamento</label><input type="date" @bind="_pagoEm" /></div>
+                    <div class="campo c-4"><label>Valor pago</label><input type="number" step="0.01" @bind="_valorPago" /></div>
+                    <div class="campo c-4">
+                        <label>Forma</label>
+                        <select @bind="_forma"><option>PIX</option><option>Boleto</option><option>Transferência</option><option>Cartão</option></select>
+                    </div>
+                    <div class="campo c-12"><label>Observação / motivo</label><input type="text" @bind="_obs" /></div>
+                </div>
+            }
+        }
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Fechar</button>
+        @if (_fatura?.Status == StatusFatura.Aberta)
+        {
+            <button class="btn btn-secundario" disabled="@Ocupado" @onclick="NaoCobrar">Isentar (não cobrar)</button>
+            <button class="btn btn-sucesso" disabled="@Ocupado" @onclick="Pagar">Registrar pagamento</button>
+        }
+        else if (_fatura?.Status is StatusFatura.Paga or StatusFatura.NaoCobrada)
+        {
+            <button class="btn btn-perigo" disabled="@Ocupado" @onclick="Estornar">Estornar / reabrir</button>
+        }
+    </Rodape>
+</Modal>
+
+@code {
+    private static readonly (string, string)[] Abas = [("grade", "Faturas"), ("apuracao", "Apuração detalhada"), ("condicoes", "Isenções e avulsos"), ("tabela", "Tabela de preço")];
+    private readonly System.Globalization.CultureInfo _br = new("pt-BR");
+    private string _aba = "grade";
+    private int _ano = Hoje.Year;
+    private List<LinhaGradeCanal> _grade = [];
+    private List<Canal> _condicoes = [];
+    private HashSet<Guid> _premiumAtivo = [];
+    private List<TabelaPrecoCanal> _tabelas = [];
+    private TabelaPrecoCanal _nova = new() { VigenciaInicio = InicioMes(Hoje).AddMonths(1) };
+    private Guid? _apCanal;
+    private DateOnly _apComp = InicioMes(Hoje).AddMonths(-1);
+    private ApuracaoUsoCanal? _apuracao;
+    private List<ApuracaoUsoTenant> _detalhes = [];
+    private Dictionary<Guid, string> _nomesCanais = [];
+    private bool _modal;
+    private FaturaCanal? _fatura;
+    private LinhaGradeCanal? _canalSel;
+    private DateOnly _pagoEm = Hoje;
+    private decimal _valorPago;
+    private string _forma = "PIX";
+    private string? _obs;
+
+    protected override Task CarregarAsync() => Recarregar();
+
+    private async Task Recarregar()
+    {
+        var fat = Svc<FaturamentoCanalService>();
+        _grade = (await fat.GradeAsync(_ano, default)).ToList();
+        _condicoes = await Db.Canais.AsNoTracking().Where(c => c.Tipo == TipoCanal.Revendedor).OrderBy(c => c.NomeMarca).ToListAsync();
+        _nomesCanais = await Db.Canais.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.NomeMarca);
+        var hoje = Hoje;
+        _premiumAtivo = (await Db.AssinaturasPremium.AsNoTracking().ToListAsync()).Where(a => a.AtivaEm(hoje)).Select(a => a.CanalId).ToHashSet();
+        _tabelas = await fat.TabelasAsync(default);
+    }
+
+    private async Task CarregarApuracao()
+    {
+        _apuracao = null;
+        _detalhes = [];
+        if (_apCanal is not { } id) return;
+        var comp = InicioMes(_apComp);
+        _apuracao = await Db.ApuracoesUsoCanal.AsNoTracking().FirstOrDefaultAsync(a => a.CanalId == id && a.Competencia == comp);
+        if (_apuracao is not null)
+            _detalhes = await Db.ApuracoesUsoTenant.AsNoTracking().Where(d => d.ApuracaoId == _apuracao.Id).OrderBy(d => d.NomeCliente).ToListAsync();
+    }
+
+    private static string Classe(CelulaFatura e) => e switch
+    {
+        CelulaFatura.Paga => "fat-paga", CelulaFatura.Aberta => "fat-aberta", CelulaFatura.Vencida => "fat-vencida",
+        CelulaFatura.NaoCobrada => "fat-naocobrada", CelulaFatura.Cancelada => "fat-cancelada", _ => "fat-vazia"
+    };
+
+    private static string Simbolo(CelulaFatura e) => e switch
+    {
+        CelulaFatura.Paga => "✓", CelulaFatura.Aberta => "•", CelulaFatura.Vencida => "!", CelulaFatura.NaoCobrada => "x", CelulaFatura.Cancelada => "–", _ => ""
+    };
+
+    private async Task Abrir(LinhaGradeCanal c, Guid? id)
+    {
+        if (id is null) return;
+        _canalSel = c;
+        _fatura = await Svc<FaturamentoCanalService>().FaturaAsync(id.Value, default);
+        _pagoEm = Hoje;
+        _valorPago = _fatura?.Valor ?? 0;
+        _obs = null;
+        _modal = true;
+    }
+
+    private async Task Pagar()
+    {
+        if (await Executar(() => Svc<FaturamentoCanalService>().RegistrarPagamentoAsync(_fatura!.Id, _pagoEm, _valorPago, _forma, _obs, default), "Pagamento registrado."))
+        { _modal = false; await Recarregar(); }
+    }
+
+    private async Task NaoCobrar()
+    {
+        if (await Executar(() => Svc<FaturamentoCanalService>().MarcarNaoCobradaAsync(_fatura!.Id, _obs ?? "Isenção concedida pela plataforma", default), "Fatura isenta."))
+        { _modal = false; await Recarregar(); }
+    }
+
+    private async Task Estornar()
+    {
+        if (await Executar(() => Svc<FaturamentoCanalService>().EstornarAsync(_fatura!.Id, "Reaberta pelo Super Admin", default), "Fatura reaberta."))
+        { _modal = false; await Recarregar(); }
+    }
+
+    private Task Processar() => Executar(async () =>
+    {
+        var (a, f, c) = await Svc<ApuracaoCanalService>().ProcessarAsync(default);
+        Avisos.Sucesso($"{a} apurações, {f} faturas geradas, {c} canais com situação alterada.");
+        await Recarregar();
+    });
+
+    private Task Regua() => Executar(async () =>
+    {
+        var n = await Svc<FaturamentoCanalService>().ProcessarReguaAsync(default);
+        Avisos.Sucesso(n == 0 ? "Nenhuma alteração de situação." : $"{n} canais tiveram a situação atualizada.");
+        await Recarregar();
+    });
+
+    private async Task SalvarCondicoes(Canal c)
+    {
+        if (await Executar(() => Svc<FaturamentoCanalService>().DefinirCondicoesAsync(c.Id, new CondicoesCanal(c.PremiumIsentoAte, c.AppProprioAtivo, c.AppProprioDesde), default), "Condições salvas."))
+            await Recarregar();
+    }
+
+    private async Task CriarTabela()
+    {
+        if (await Executar(() => Svc<FaturamentoCanalService>().NovaTabelaAsync(_nova, default), "Nova versão da tabela criada."))
+        {
+            _nova = new TabelaPrecoCanal { VigenciaInicio = InicioMes(Hoje).AddMonths(1) };
+            await Recarregar();
+        }
+    }
+}

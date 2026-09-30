@@ -1,0 +1,56 @@
+@using PersonaliPonto.Modules.SaaS.Domain
+<div class="pilha" style="gap:8px">
+    <div class="linha entre"><span>Vencimento</span><b>@Fatura.Vencimento.ToString("dd/MM/yyyy")</b></div>
+    <div class="linha entre"><span>Situação</span><SituacaoFaturaCanal Fatura="Fatura" /></div>
+    @if (Fatura.PagaEm is not null)
+    {
+        <div class="linha entre"><span>Pago em</span><b>@Fatura.PagaEm?.ToString("dd/MM/yyyy") · @Formato.Moeda(Fatura.ValorPago ?? 0) · @Fatura.FormaPagamento</b></div>
+    }
+    @if (Fatura.GatewayStatus != StatusCobrancaGateway.Nenhuma)
+    {
+        <div class="linha entre"><span>Cobrança Asaas</span><b>@(Fatura.GatewayStatus switch
+        {
+            StatusCobrancaGateway.Pendente => "pendente de envio",
+            StatusCobrancaGateway.Emitida => "emitida",
+            StatusCobrancaGateway.Falha => "falha no envio (nova tentativa automática)",
+            StatusCobrancaGateway.Cancelada => "removida no Asaas",
+            StatusCobrancaGateway.Estornada => "estornada",
+            _ => ""
+        })</b></div>
+        @if (Fatura.GatewayStatus == StatusCobrancaGateway.Falha && Fatura.GatewayErro is { } erro)
+        {
+            <div class="small muted">@erro</div>
+        }
+    }
+    @if (Fatura.Observacao is not null)
+    {
+        <div class="small muted">@Fatura.Observacao</div>
+    }
+</div>
+<div class="tabela-wrap mt">
+    <table class="tabela">
+        <thead><tr><th>Item</th><th class="num">Qtd.</th><th class="num">Unitário</th><th class="num">Valor</th></tr></thead>
+        <tbody>
+            @foreach (var i in Fatura.Itens.OrderBy(i => i.Ordem))
+            {
+                <tr>
+                    <td>@i.Descricao</td>
+                    <td class="num">@i.Quantidade.ToString("N0")</td>
+                    <td class="num">@Formato.Moeda(i.ValorUnitario)</td>
+                    <td class="num">@Formato.Moeda(i.Valor)</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot><tr><td><b>Total</b></td><td></td><td></td><td class="num"><b>@Formato.Moeda(Fatura.Valor)</b></td></tr></tfoot>
+    </table>
+</div>
+@if (MostrarPagamento)
+{
+    <PagamentoFatura Fatura="Fatura" />
+}
+
+@code {
+    [Parameter, EditorRequired] public FaturaCanal Fatura { get; set; } = default!;
+    /// <summary>Exibe as opções de pagamento do Asaas (tela do pagador).</summary>
+    [Parameter] public bool MostrarPagamento { get; set; }
+}

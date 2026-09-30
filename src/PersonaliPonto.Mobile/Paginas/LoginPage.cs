@@ -55,7 +55,7 @@ public sealed class LoginPage : ContentPage
                                     },
                                     Ui.L("PLATAFORMA INTELIGENTE", 12, Ui.Ciano, true),
                                     Ui.L("DE GESTÃO DE JORNADA", 24, Colors.White, true),
-                                    Ui.L("Registre seu ponto, acompanhe sua jornada e seus comprovantes.", 14, Color.FromArgb("#C9D6EA"))
+                                    Ui.L("Registre seu ponto, acompanhe sua jornada e seus comprovantes.", 14, Color.FromArgb("#D6D1C4"))
                                 }
                             }
                         }

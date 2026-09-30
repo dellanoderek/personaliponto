@@ -1,0 +1,12 @@
+@using PersonaliPonto.Modules.SaaS.Domain
+@switch (Status)
+{
+    case StatusCanal.Ativo: <span class="badge b-verde">ativo</span> break;
+    case StatusCanal.Aviso: <span class="badge b-amarelo">aviso</span> break;
+    case StatusCanal.PainelBloqueado: <span class="badge b-vermelho">painel bloqueado</span> break;
+    default: <span class="badge b-cinza">suspenso</span> break;
+}
+
+@code {
+    [Parameter] public StatusCanal Status { get; set; }
+}

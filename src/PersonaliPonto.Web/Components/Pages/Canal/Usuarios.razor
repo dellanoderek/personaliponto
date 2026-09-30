@@ -1,0 +1,113 @@
+@page "/canal/usuarios"
+@attribute [Authorize(Policy = Politicas.CanalAdmin)]
+@inherits PaginaCanal
+@using PersonaliPonto.Infrastructure.Seguranca
+
+<PageTitle>Usuários do canal — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="@(EhRevendedor ? "Revendedor" : "Parceiro")" Titulo="Usuários do canal" Descricao="Equipe com acesso ao painel do canal. Administradores gerenciam clientes e usuários; o suporte consulta a carteira e atende clientes pelo modo suporte auditado.">
+    <Acoes><button class="btn btn-primario" @onclick="Novo"><Icone Nome="mais" />Novo usuário</button></Acoes>
+</Cabecalho>
+
+@if (_senha is not null)
+{
+    <div class="alerta sucesso" style="margin-bottom:16px"><Icone Nome="chave" /><div>Login <b>@_senha.Value.Login</b> · senha temporária <b class="mono" style="font-size:14px">@_senha.Value.Senha</b> — ela não será exibida novamente.</div></div>
+}
+
+<div class="card">
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th>Último acesso</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var u in _lista)
+                {
+                    <tr>
+                        <td style="font-weight:600">@u.Nome</td>
+                        <td class="small">@u.Email</td>
+                        <td>
+                            <select value="@u.Papel" @onchange="e => Alterar(u, e.Value?.ToString() ?? u.Papel, u.Ativo)">
+                                @foreach (var p in _papeis)
+                                {
+                                    <option value="@p">@Formato.Papel(p)</option>
+                                }
+                            </select>
+                        </td>
+                        <td>@(u.Ativo ? "ativo" : "inativo")</td>
+                        <td class="small">@(u.UltimoLogin?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                        <td class="right linha">
+                            <button class="btn btn-secundario btn-sm" @onclick="() => Redefinir(u)">Redefinir senha</button>
+                            <button class="btn btn-fantasma btn-sm" @onclick="() => Alterar(u, u.Papel, !u.Ativo)">@(u.Ativo ? "Desativar" : "Ativar")</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="Novo usuário do canal">
+    <ChildContent>
+        <div class="form-grade">
+            <div class="campo c-12"><label>Nome</label><input type="text" @bind="_nome" /></div>
+            <div class="campo c-8"><label>E-mail</label><input type="email" @bind="_email" /></div>
+            <div class="campo c-4">
+                <label>Perfil</label>
+                <select @bind="_papel">
+                    @foreach (var p in _papeis)
+                    {
+                        <option value="@p">@Formato.Papel(p)</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </ChildContent>
+    <Rodape>
+        <button class="btn btn-secundario" @onclick="() => _modal = false">Cancelar</button>
+        <button class="btn btn-primario" disabled="@Ocupado" @onclick="Criar">Criar acesso</button>
+    </Rodape>
+</Modal>
+
+@code {
+    private List<Usuario> _lista = [];
+    private string[] _papeis = [];
+    private bool _modal;
+    private string _nome = "", _email = "", _papel = "";
+    private (string Login, string Senha)? _senha;
+
+    protected override async Task CarregarAsync()
+    {
+        _papeis = Canal is null ? [] : UsuarioService.PapeisDoCanal(Canal.Tipo);
+        _lista = await Svc<UsuarioService>().ListarUsuariosCanalAsync(default);
+    }
+
+    private void Novo()
+    {
+        _nome = _email = "";
+        _papel = _papeis.LastOrDefault() ?? "";
+        _modal = true;
+    }
+
+    private async Task Criar()
+    {
+        if (await Executar(async () =>
+            {
+                var a = await Svc<UsuarioService>().CriarUsuarioCanalAsync(_nome, _email, _papel, default);
+                _senha = (a.Login, a.SenhaTemporaria);
+            }, "Usuário criado."))
+        {
+            _modal = false;
+            await CarregarAsync();
+        }
+    }
+
+    private async Task Alterar(Usuario u, string papel, bool ativo)
+    {
+        if (await Executar(() => Svc<UsuarioService>().AlterarUsuarioCanalAsync(u.Id, papel, ativo, default), "Usuário atualizado.")) await CarregarAsync();
+    }
+
+    private Task Redefinir(Usuario u) => Executar(async () =>
+    {
+        var s = await Svc<UsuarioService>().RedefinirSenhaCanalAsync(u.Id, default);
+        _senha = (u.Email, s);
+    }, "Senha redefinida.");
+}

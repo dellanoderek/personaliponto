@@ -1,0 +1,228 @@
+@page "/canal/minha-conta"
+@attribute [Authorize(Policy = Politicas.Canal)]
+@inherits PaginaCanal
+@using PersonaliPonto.Modules.SaaS.Domain
+@using PersonaliPonto.Modules.SaaS.Services
+@using PersonaliPonto.Infrastructure.Tenancy
+@using PersonaliPonto.Infrastructure.Pagamentos
+
+<PageTitle>@(EhRevendedor ? "Minha conta PersonaliPonto" : "Minhas faturas") — PersonaliPonto</PageTitle>
+
+<Cabecalho Secao="@(EhRevendedor ? "Revendedor" : "Parceiro")" Titulo="@(EhRevendedor ? "Minha conta PersonaliPonto" : "Minhas faturas")"
+           Descricao="@(EhRevendedor ? "Faturas da plataforma, uso apurado por competência e assinatura Premium. Cobrança por uso: empresas ativas e funcionários com marcação no mês." : $"Faturas da sua parceria com {_nomeRecebedor}.")" />
+
+@if (Canal is { Status: not StatusCanal.Ativo })
+{
+    <div class="alerta @(PainelBloqueado ? "erro" : "aviso")" style="margin-bottom:16px">
+        <Icone Nome="alerta" />
+        <div>
+            <b>Pendência financeira — situação: <SituacaoCanal Status="Canal.Status" /></b><br />
+            @if (_vencido > 0)
+            {
+                <span>Em atraso: <b>@Formato.Moeda(_vencido)</b>. </span>
+            }
+            Régua: aviso após @FaturamentoCanalService.DiasAviso dias, painel bloqueado após @FaturamentoCanalService.DiasPainelBloqueado dias e suspensão após @FaturamentoCanalService.DiasSuspensao dias do vencimento.
+            Ao regularizar, o painel volta a ficar ativo automaticamente. A marcação de ponto dos clientes, comprovantes, espelho e AFD/AEJ nunca são bloqueados.
+        </div>
+    </div>
+}
+
+@if (EhRevendedor)
+{
+    <div class="grade grade-4">
+        @if (_estimativa is null)
+        {
+            <Kpi Rotulo="Uso do mês (estimado)" Valor="—" />
+        }
+        else
+        {
+            <Kpi Rotulo="Empresas ativas (mês)" Valor="@_estimativa.EmpresasAtivas.ToString()" Detalhe="@($"competência {_estimativa.Competencia:MM/yyyy}")" />
+            <Kpi Rotulo="Funcionários ativos (mês)" Valor="@_estimativa.FuncionariosAtivos.ToString("N0")" Detalhe="com ≥ 1 marcação no mês" />
+            <Kpi Rotulo="Uso estimado" Valor="@Formato.Moeda(_estimativa.Calculo.Total)" Detalhe="@(_estimativa.Cobravel ? $"mínimo {Formato.Moeda(_tabela?.MinimoMensal ?? 0)}" : "mês de entrada: não cobrado")" />
+        }
+        <Kpi Rotulo="Premium" Valor="@(_premium is null ? "Inativo" : "Ativo")" Estado="@(_premium is null ? null : "ok")"
+             Detalhe="@(_premium is null ? $"{Formato.Moeda(_tabela?.PrecoPremium ?? 149)}/mês" : Canal?.PremiumIsentoAte is { } ate && ate >= Hoje ? $"isento até {ate:dd/MM/yyyy}" : $"desde {_premium.Inicio:dd/MM/yyyy}")" />
+    </div>
+
+    <div class="grade grade-2 mt">
+        <div class="card">
+            <div class="card-cab"><h2>Uso estimado de @(_estimativa?.Competencia.ToString("MM/yyyy"))</h2></div>
+            @if (_estimativa is not null)
+            {
+                var u = _estimativa.Calculo;
+                <div class="tabela-wrap">
+                    <table class="tabela">
+                        <tbody>
+                            <tr><td>Empresas ativas</td><td class="num">@u.Empresas × @Formato.Moeda(_tabela!.PrecoEmpresaAtiva)</td><td class="num">@Formato.Moeda(u.ValorEmpresas)</td></tr>
+                            <tr><td>Funcionários até @_tabela.Faixa1Ate.ToString("N0")</td><td class="num">@u.QtdFaixa1.ToString("N0") × @Formato.Moeda(_tabela.Faixa1Preco)</td><td class="num">@Formato.Moeda(u.ValorFaixa1)</td></tr>
+                            <tr><td>De @((_tabela.Faixa1Ate + 1).ToString("N0")) a @_tabela.Faixa2Ate.ToString("N0")</td><td class="num">@u.QtdFaixa2.ToString("N0") × @Formato.Moeda(_tabela.Faixa2Preco)</td><td class="num">@Formato.Moeda(u.ValorFaixa2)</td></tr>
+                            <tr><td>Acima de @_tabela.Faixa2Ate.ToString("N0")</td><td class="num">@u.QtdFaixa3.ToString("N0") × @Formato.Moeda(_tabela.Faixa3Preco)</td><td class="num">@Formato.Moeda(u.ValorFaixa3)</td></tr>
+                            @if (u.AjusteMinimo > 0)
+                            {
+                                <tr><td>Complemento ao mínimo</td><td></td><td class="num">@Formato.Moeda(u.AjusteMinimo)</td></tr>
+                            }
+                            <tr><td><b>Total do uso</b></td><td></td><td class="num"><b>@Formato.Moeda(u.Total)</b></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small muted" style="padding:0 16px 14px">Estimativa parcial do mês corrente (faixas marginais). A fatura é gerada no início do mês seguinte, com vencimento no dia @FaturamentoCanalService.DiaVencimento, a partir do snapshot apurado.</p>
+            }
+        </div>
+        <div class="card">
+            <div class="card-cab"><h2>Assinatura Premium</h2></div>
+            <div style="padding:16px" class="pilha">
+                <p class="small">Remove o "by PersonaliPonto", habilita domínio próprio, cobrança automática dos clientes, relatórios avançados, destaque no diretório e página própria (liberados nas próximas etapas). @Formato.Moeda(_tabela?.PrecoPremium ?? 149)/mês, sem pró-rata. Contratação somente pelo painel web.</p>
+                @if (_premium is not null)
+                {
+                    <div class="alerta sucesso"><Icone Nome="check" /><div>Premium ativo desde @_premium.Inicio.ToString("dd/MM/yyyy").</div></div>
+                }
+                @if (TemPapel(Roles.AdminRevendedor) && !PainelBloqueado)
+                {
+                    <div class="linha">
+                        @if (_premium is null)
+                        {
+                            <button class="btn btn-primario" disabled="@Ocupado" @onclick="AtivarPremium">Ativar Premium</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-perigo" disabled="@Ocupado" @onclick="CancelarPremium">Cancelar Premium</button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (EhRevendedor)
+{
+    <div class="card mt" id="asaas">
+        <div class="card-cab"><h2>Cobrança automática dos seus clientes (Asaas)</h2></div>
+        <div style="padding:16px" class="pilha">
+            <p class="small">Conecte a <b>sua própria</b> conta Asaas: as faturas dos seus clientes e dos seus parceiros passam a ser cobradas por Pix, boleto ou cartão, com baixa automática. O dinheiro cai direto na sua conta — nunca passa pela PersonaliPonto. Clientes públicos continuam com fatura manual/empenho.</p>
+            @if (_premium is null)
+            {
+                <div class="alerta info"><Icone Nome="info" /><div>Recurso Premium. Ative o Premium para conectar sua conta Asaas.</div></div>
+            }
+            else if (_conta.Conectada)
+            {
+                <div class="alerta sucesso" data-asaas="conectada"><Icone Nome="check" /><div>
+                    Conta conectada: <b>@_conta.NomeConta</b> · chave ••••@_conta.ChaveFinal · @(_conta.Sandbox ? "Sandbox" : "Produção") · desde @_conta.ConectadaEm?.ToLocalTime().ToString("dd/MM/yyyy")
+                </div></div>
+                @if (TemPapel(Roles.AdminRevendedor) && !PainelBloqueado)
+                {
+                    <div class="linha"><button class="btn btn-perigo" disabled="@Ocupado" @onclick="DesconectarAsaas">Desconectar conta Asaas</button></div>
+                }
+            }
+            else if (TemPapel(Roles.AdminRevendedor) && !PainelBloqueado)
+            {
+                <div class="campo"><label>Chave API do Asaas (Asaas → Integrações → Chave de API)</label>
+                    <input type="password" autocomplete="off" spellcheck="false" placeholder="$aact_..." @bind="_chaveAsaas" /></div>
+                <p class="small muted">A chave é validada no Asaas, guardada cifrada e nunca mais exibida (só os 4 últimos caracteres). Criamos automaticamente o webhook de baixa na sua conta.</p>
+                <div class="linha"><button class="btn btn-primario" disabled="@(Ocupado || string.IsNullOrWhiteSpace(_chaveAsaas))" @onclick="ConectarAsaas">Conectar conta Asaas</button></div>
+            }
+            else
+            {
+                <div class="small muted">Nenhuma conta Asaas conectada.</div>
+            }
+        </div>
+    </div>
+}
+
+@foreach (var f in _faturas.Where(f => f.Status == StatusFatura.Aberta && f.GatewayStatus != StatusCobrancaGateway.Nenhuma && f.GatewayStatus != StatusCobrancaGateway.Cancelada))
+{
+    <div class="mt">
+        <div class="small"><b>Fatura @(f.Tipo == TipoFaturaCanal.Avulsa ? "avulsa" : f.Competencia.ToString("MM/yyyy"))</b> · @Formato.Moeda(f.Valor) · vence @f.Vencimento.ToString("dd/MM/yyyy")</div>
+        <PagamentoFatura Fatura="f" />
+    </div>
+}
+
+<div class="card mt">
+    <div class="card-cab"><h2>Faturas</h2></div>
+    <div class="tabela-wrap">
+        <table class="tabela">
+            <thead><tr><th>Competência</th><th>Descrição</th><th>Vencimento</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var f in _faturas)
+                {
+                    <tr class="clicavel" @onclick="() => Abrir(f)">
+                        <td>@f.Competencia.ToString("MM/yyyy")</td>
+                        <td>@(f.Tipo switch { TipoFaturaCanal.Plataforma => "Uso da plataforma", TipoFaturaCanal.Avulsa => "Compra no painel", _ => "Parceria" })</td>
+                        <td>@f.Vencimento.ToString("dd/MM/yyyy")</td>
+                        <td class="num">@Formato.Moeda(f.Valor)</td>
+                        <td><SituacaoFaturaCanal Fatura="f" /></td>
+                        <td class="right"><button class="btn btn-sm btn-secundario">Detalhes</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_faturas.Count == 0)
+    {
+        <Vazio Texto="Nenhuma fatura ainda. A primeira cobrança é a do mês seguinte à entrada." Icone="cartao" />
+    }
+</div>
+
+<Modal @bind-Aberto="_modal" Titulo="@($"Fatura {_sel?.Competencia:MM/yyyy}")">
+    <ChildContent>
+        @if (_sel is not null)
+        {
+            <DetalheFaturaCanal Fatura="_sel" MostrarPagamento="true" />
+        }
+    </ChildContent>
+    <Rodape><button class="btn btn-secundario" @onclick="() => _modal = false">Fechar</button></Rodape>
+</Modal>
+
+@code {
+    protected override bool PermitidaComPainelBloqueado => true;
+
+    private List<FaturaCanal> _faturas = [];
+    private EstimativaUso? _estimativa;
+    private TabelaPrecoCanal? _tabela;
+    private AssinaturaPremium? _premium;
+    private decimal _vencido;
+    private string _nomeRecebedor = "o seu revendedor";
+    private FaturaCanal? _sel;
+    private bool _modal;
+    private ResumoContaGateway _conta = new(false, null, null, false, null);
+    private string? _chaveAsaas;
+
+    protected override async Task CarregarAsync()
+    {
+        if (CanalId is not { } id) return;
+        var fat = Svc<FaturamentoCanalService>();
+        _faturas = await fat.FaturasPagasPorAsync(id, default);
+        _vencido = _faturas.Where(f => f.Vencida(Hoje)).Sum(f => f.Valor);
+        if (EhRevendedor)
+        {
+            _tabela = await fat.TabelaVigenteAsync(Hoje, default);
+            _estimativa = await Svc<ApuracaoCanalService>().EstimarMesCorrenteAsync(id, default);
+            _premium = await fat.PremiumVigenteAsync(id, default);
+            _conta = await Svc<ContaGatewayService>().ResumoAsync(id, default);
+        }
+    }
+
+    private void Abrir(FaturaCanal f) { _sel = f; _modal = true; }
+
+    private async Task AtivarPremium()
+    {
+        if (await Executar(() => Svc<ComprasCanalService>().AtivarPremiumAsync(default), "Premium ativado. A cobrança do mês foi gerada em Minhas faturas.")) await CarregarAsync();
+    }
+
+    private async Task ConectarAsaas()
+    {
+        var chave = _chaveAsaas ?? "";
+        _chaveAsaas = null; // nunca mantém a chave no estado do circuito
+        if (await Executar(() => Svc<ContaGatewayService>().ConectarAsync(chave, default), "Conta Asaas conectada.")) await CarregarAsync();
+    }
+
+    private async Task DesconectarAsaas()
+    {
+        if (await Executar(() => Svc<ContaGatewayService>().DesconectarAsync(default), "Conta Asaas desconectada.")) await CarregarAsync();
+    }
+
+    private async Task CancelarPremium()
+    {
+        if (await Executar(() => Svc<FaturamentoCanalService>().CancelarPremiumAsync(default), "Premium cancelado.")) await CarregarAsync();
+    }
+}

@@ -84,6 +84,78 @@ public sealed class UsuarioService(PersonaliPontoDbContext db, RequestContext ct
 
     public Task<List<Usuario>> ListarAsync(CancellationToken ct) =>
         db.Usuarios.AsNoTracking().OrderBy(u => u.Nome).ToListAsync(ct);
+
+    // ---------------- Usuários de canal (revendedor/parceiro) ----------------
+
+    /// <summary>Papéis que um canal pode atribuir aos próprios usuários, conforme o tipo do canal.</summary>
+    public static string[] PapeisDoCanal(Modules.SaaS.Domain.TipoCanal tipo) => tipo switch
+    {
+        Modules.SaaS.Domain.TipoCanal.Revendedor => Roles.PapeisRevendedor,
+        Modules.SaaS.Domain.TipoCanal.Parceiro => Roles.PapeisParceiro,
+        _ => []
+    };
+
+    private async Task<Modules.SaaS.Domain.Canal> CanalDoAdminAsync(CancellationToken ct)
+    {
+        var canalId = ctx.CanalId ?? throw new AcessoNegadoException("Operação exige um canal.");
+        if (ctx.Papel is not (Roles.AdminRevendedor or Roles.AdminParceiro))
+            throw new AcessoNegadoException("Apenas o administrador do canal gerencia usuários.");
+        return await db.Canais.AsNoTracking().FirstOrDefaultAsync(c => c.Id == canalId, ct) ?? throw new NaoEncontradoException("Canal não encontrado.");
+    }
+
+    public Task<List<Usuario>> ListarUsuariosCanalAsync(CancellationToken ct)
+    {
+        var canalId = ctx.CanalId ?? throw new AcessoNegadoException("Operação exige um canal.");
+        return db.Usuarios.AsNoTracking().Where(u => u.CanalId == canalId).OrderBy(u => u.Nome).ToListAsync(ct);
+    }
+
+    public async Task<AcessoCriado> CriarUsuarioCanalAsync(string nome, string email, string papel, CancellationToken ct)
+    {
+        var canal = await CanalDoAdminAsync(ct);
+        if (!PapeisDoCanal(canal.Tipo).Contains(papel)) throw new RegraNegocioException("Papel inválido para este canal.");
+        var login = (email ?? "").Trim().ToLowerInvariant();
+        if (!login.Contains('@')) throw new RegraNegocioException("E-mail inválido.");
+        if (string.IsNullOrWhiteSpace(nome)) throw new RegraNegocioException("Informe o nome.");
+        using (ctx.ComoSistema())
+            if (await db.Usuarios.AnyAsync(u => u.Email == login, ct)) throw new RegraNegocioException("Já existe usuário com este e-mail.");
+
+        var senha = ClienteService.SenhaTemporaria();
+        var u = new Usuario
+        {
+            CanalId = canal.Id, Escopo = EscopoUsuario.Canal, Nome = nome.Trim(), Email = login, Papel = papel,
+            SenhaHash = SecretHasher.Hash(senha), DeveTrocarSenha = true, CriadoEm = clock.UtcNow
+        };
+        db.Usuarios.Add(u);
+        audit.Registrar("canal.usuario_criado", nameof(Usuario), u.Id, new { u.Nome, papel });
+        await db.SaveChangesAsync(ct);
+        return new AcessoCriado(u.Id, login, senha);
+    }
+
+    public async Task AlterarUsuarioCanalAsync(Guid usuarioId, string papel, bool ativo, CancellationToken ct)
+    {
+        var canal = await CanalDoAdminAsync(ct);
+        if (!PapeisDoCanal(canal.Tipo).Contains(papel)) throw new RegraNegocioException("Papel inválido para este canal.");
+        var u = await db.Usuarios.FirstOrDefaultAsync(x => x.Id == usuarioId && x.CanalId == canal.Id, ct) ?? throw new NaoEncontradoException("Usuário não encontrado.");
+        if (u.Id == ctx.UserId && (!ativo || papel != u.Papel)) throw new RegraNegocioException("Você não pode rebaixar ou desativar o próprio usuário.");
+        u.Papel = papel;
+        u.Ativo = ativo;
+        audit.Registrar("canal.usuario_alterado", nameof(Usuario), u.Id, new { papel, ativo });
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<string> RedefinirSenhaCanalAsync(Guid usuarioId, CancellationToken ct)
+    {
+        var canal = await CanalDoAdminAsync(ct);
+        var u = await db.Usuarios.FirstOrDefaultAsync(x => x.Id == usuarioId && x.CanalId == canal.Id, ct) ?? throw new NaoEncontradoException("Usuário não encontrado.");
+        var senha = ClienteService.SenhaTemporaria();
+        u.SenhaHash = SecretHasher.Hash(senha);
+        u.DeveTrocarSenha = true;
+        u.TentativasFalhas = 0;
+        u.BloqueadoAte = null;
+        audit.Registrar("canal.usuario_senha_redefinida", nameof(Usuario), u.Id);
+        await db.SaveChangesAsync(ct);
+        return senha;
+    }
 }
 
 public sealed record TerminalAtivado(Guid TerminalId, string Token);

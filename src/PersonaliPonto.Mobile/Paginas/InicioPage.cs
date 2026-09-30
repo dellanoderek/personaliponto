@@ -44,10 +44,10 @@ public sealed class InicioPage : ContentPage
         // Trilho "deslize para registrar": o polegar precisa chegar ao fim para registrar (evita toques acidentais).
         _polegar = new Border
         {
-            WidthRequest = 120, HeightRequest = 120, BackgroundColor = Ui.Azul, StrokeThickness = 0,
+            WidthRequest = 120, HeightRequest = 120, BackgroundColor = Ui.Ouro, StrokeThickness = 0,
             StrokeShape = new Ellipse(), HorizontalOptions = LayoutOptions.Start,
             Shadow = new Shadow { Brush = Ui.Marinho, Opacity = 0.35f, Radius = 16, Offset = new Point(0, 6) },
-            Content = Ui.L("Deslize ›", 18, Colors.White, true, TextAlignment.Center)
+            Content = Ui.L("Deslize ›", 18, Ui.Marinho, true, TextAlignment.Center)
         };
         ((Label)_polegar.Content!).VerticalTextAlignment = TextAlignment.Center;
         var alvo = new Border

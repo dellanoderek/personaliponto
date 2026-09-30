@@ -17,6 +17,7 @@ using PersonaliPonto.Infrastructure.Tenancy;
 using PersonaliPonto.Modules.Analytics;
 using PersonaliPonto.Modules.RH;
 using PersonaliPonto.Modules.SaaS;
+using PersonaliPonto.Modules.SaaS.Services;
 
 namespace PersonaliPonto.Infrastructure;
 
@@ -81,10 +82,28 @@ public static class DependencyInjection
         services.AddModuloRh();
         services.AddModuloAnalytics();
 
+        services.AddScoped<ContextoCanalService>();
+        services.AddScoped<ApuracaoCanalService>();
+        services.AddScoped<SituacaoCanalCliente>();
+        services.AddScoped<IUnicidadeGlobal, UnicidadeGlobal>();
+        services.AddScoped<SuporteService>();
         services.AddScoped<AuthService>();
         services.AddScoped<UsuarioService>();
         services.AddScoped<TerminalService>();
         services.AddSingleton<OutboxProcessor>();
+
+        // Pagamentos (E3/E9): Asaas da plataforma e contas próprias dos revendedores Premium.
+        services.Configure<Pagamentos.AsaasOptions>(cfg.GetSection("Asaas"));
+        services.AddHttpClient<Pagamentos.IGatewayPagamento, Pagamentos.AsaasGateway>();
+        services.AddSingleton<Pagamentos.CofreChavesGateway>();
+        services.AddSingleton<Pagamentos.CredenciaisGateway>();
+        services.AddScoped<Pagamentos.ContaGatewayService>();
+        services.AddScoped<Pagamentos.ComprasCanalService>();
+        services.AddScoped<Pagamentos.WebhookAsaasService>();
+        services.AddScoped<Pagamentos.VarreduraCobrancasGateway>();
+        services.AddScoped<Pagamentos.CobrancaGatewayHandler>();
+        services.AddScoped<IOutboxHandler>(sp => sp.GetRequiredService<Pagamentos.CobrancaGatewayHandler>());
+        services.AddScoped<IOutboxHandler, Pagamentos.EventoGatewayHandler>();
 
         if (rotinasEmSegundoPlano)
         {

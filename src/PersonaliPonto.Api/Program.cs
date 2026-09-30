@@ -86,7 +86,7 @@ app.Use(async (ctx, next) =>
 app.UseAuthentication();
 app.Use(async (ctx, next) =>
 {
-    ClaimsContexto.Preencher(ctx.RequestServices.GetRequiredService<RequestContext>(), ctx.User, ctx.Connection.RemoteIpAddress?.ToString());
+    await ClaimsContexto.PreencherAsync(ctx.RequestServices, ctx.User, ctx.Connection.RemoteIpAddress?.ToString(), ctx.RequestAborted);
     await next();
 });
 app.UseAuthorization();

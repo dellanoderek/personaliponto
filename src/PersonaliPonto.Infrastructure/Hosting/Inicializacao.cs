@@ -35,6 +35,10 @@ public static class Inicializacao
         var db = scope.ServiceProvider.GetRequiredService<PersonaliPontoDbContext>();
         var clock = scope.ServiceProvider.GetRequiredService<IClock>();
 
+        // Canal Owner raiz (também criado pela migration): idempotente.
+        if (!await db.Canais.AnyAsync(c => c.Id == Canal.OwnerRaizId, ct))
+            await db.Database.ExecuteSqlRawAsync(SegurancaBanco.SemearOwner, ct);
+
         if (!await db.Usuarios.AnyAsync(u => u.Papel == Roles.SuperAdmin, ct))
         {
             var email = cfg["SuperAdmin:Email"];

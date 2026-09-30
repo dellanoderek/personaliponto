@@ -1,0 +1,54 @@
+@using PersonaliPonto.Modules.SaaS.Domain
+@* Formas de pagamento da cobrança emitida no Asaas (Pix copia-e-cola/QR, boleto, cartão pelo link da fatura). *@
+@if (Fatura.Status == StatusFatura.Aberta)
+{
+    @switch (Fatura.GatewayStatus)
+    {
+        case StatusCobrancaGateway.Pendente or StatusCobrancaGateway.Falha:
+            <div class="alerta aviso mt" data-pagamento="pendente"><Icone Nome="relogio" /><div>Cobrança sendo gerada no Asaas. As opções de pagamento aparecem aqui em instantes.</div></div>
+            break;
+        case StatusCobrancaGateway.Emitida:
+            <div class="card mt" data-pagamento="emitida">
+                <div class="card-cab"><h2>Pagar</h2></div>
+                <div style="padding:16px" class="pilha">
+                    @if (Fatura.GatewayPixCopiaCola is { } pix)
+                    {
+                        <div class="linha" style="gap:16px;align-items:flex-start;flex-wrap:wrap">
+                            @if (Fatura.GatewayPixQrCode is { } qr)
+                            {
+                                <img src="data:image/png;base64,@qr" alt="QR Code Pix" width="160" height="160" style="border-radius:8px;background:#fff" />
+                            }
+                            <div class="pilha" style="flex:1;min-width:220px;gap:6px">
+                                <b>Pix copia e cola</b>
+                                <textarea readonly rows="3" style="width:100%;font-family:monospace;font-size:12px">@pix</textarea>
+                                <button type="button" class="btn btn-sm btn-secundario" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)">Copiar código Pix</button>
+                            </div>
+                        </div>
+                    }
+                    @if (Fatura.GatewayLinhaDigitavel is { } linha)
+                    {
+                        <div class="pilha" style="gap:6px">
+                            <b>Boleto — linha digitável</b>
+                            <input readonly value="@linha" style="width:100%;font-family:monospace" />
+                        </div>
+                    }
+                    <div class="linha" style="flex-wrap:wrap;gap:8px">
+                        @if (Fatura.GatewayBoletoUrl is { } boleto)
+                        {
+                            <a class="btn btn-secundario" href="@boleto" target="_blank" rel="noopener noreferrer">Abrir boleto</a>
+                        }
+                        @if (Fatura.GatewayLink is { } link)
+                        {
+                            <a class="btn btn-primario" href="@link" target="_blank" rel="noopener noreferrer">Pagar com cartão / ver fatura</a>
+                        }
+                    </div>
+                    <p class="small muted">Pagamento processado pelo Asaas. A baixa é automática assim que o pagamento for confirmado.</p>
+                </div>
+            </div>
+            break;
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public ICobrancaGateway Fatura { get; set; } = default!;
+}

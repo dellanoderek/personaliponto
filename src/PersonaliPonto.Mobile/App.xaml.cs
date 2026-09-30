@@ -20,7 +20,7 @@ public partial class App : Application
 	}
 
 	protected override Window CreateWindow(IActivationState? activationState) =>
-		new(new ContentPage { BackgroundColor = Colors.White, Content = new ActivityIndicator { IsRunning = true, Color = Color.FromArgb("#1166D6"), VerticalOptions = LayoutOptions.Center } })
+		new(new ContentPage { BackgroundColor = Colors.White, Content = new ActivityIndicator { IsRunning = true, Color = Color.FromArgb("#C9A54C"), VerticalOptions = LayoutOptions.Center } })
 		{
 			Title = "PersonaliPonto"
 		};

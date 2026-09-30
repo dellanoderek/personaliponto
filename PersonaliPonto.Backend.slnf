@@ -1,0 +1,18 @@
+{
+  "solution": {
+    "path": "PersonaliPonto.sln",
+    "projects": [
+      "src\\PersonaliPonto.Shared\\PersonaliPonto.Shared.csproj",
+      "src\\PersonaliPonto.Core.RepP\\PersonaliPonto.Core.RepP.csproj",
+      "src\\PersonaliPonto.Modules.RH\\PersonaliPonto.Modules.RH.csproj",
+      "src\\PersonaliPonto.Modules.Analytics\\PersonaliPonto.Modules.Analytics.csproj",
+      "src\\PersonaliPonto.Modules.SaaS\\PersonaliPonto.Modules.SaaS.csproj",
+      "src\\PersonaliPonto.Infrastructure\\PersonaliPonto.Infrastructure.csproj",
+      "src\\PersonaliPonto.Api\\PersonaliPonto.Api.csproj",
+      "src\\PersonaliPonto.Web\\PersonaliPonto.Web.csproj",
+      "tests\\PersonaliPonto.Core.Tests\\PersonaliPonto.Core.Tests.csproj",
+      "tests\\PersonaliPonto.IntegrationTests\\PersonaliPonto.IntegrationTests.csproj",
+      "tests\\PersonaliPonto.Web.Tests\\PersonaliPonto.Web.Tests.csproj"
+    ]
+  }
+}
